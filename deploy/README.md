@@ -1,29 +1,75 @@
-# Bazinga Deployment Setup
+# Bazinga Deployment (Docker Compose)
 
-One-time setup steps on the GitLab VM (`gitlab.gitlab-servak`) before the CI/CD
-pipeline can deploy successfully.
+The pipeline builds two Docker images per branch (API + client), pushes them to
+the GitLab Container Registry, then SSHes to the target server and runs
+`docker compose pull && up -d` against `docker-compose.yml`.
 
-## 1. Install runtimes
-
-```bash
-# .NET 9 runtime (for the API)
-sudo apt-get update
-sudo apt-get install -y dotnet-runtime-9.0 aspnetcore-runtime-9.0
-
-# nginx (to serve the client SPA and reverse-proxy the API)
-sudo apt-get install -y nginx rsync
+```
+push to main  ->  build_api_main, build_client_main  ->  deploy_main  (port 80,   /var/www/bazinga-prod)
+push to dev   ->  build_api_dev,  build_client_dev   ->  deploy_dev   (port 8080, /var/www/bazinga-dev)
 ```
 
-## 2. Create deploy user and target directories
+The same `docker-compose.yml` is used for both environments. The deploy job
+writes a fresh `.env` next to it on the server with the right image tags and
+port, so prod and dev are isolated by `COMPOSE_PROJECT_NAME` and live as two
+independent compose stacks.
+
+## One-time GitLab setup
+
+### 1. Enable the Container Registry on your GitLab instance
+
+If your self-hosted GitLab does not yet have the registry enabled, edit
+`/etc/gitlab/gitlab.rb`:
+
+```ruby
+registry_external_url 'https://gitlab.gitlab-servak:5050'
+```
+
+Then `sudo gitlab-ctl reconfigure`. Verify in the project: *Deploy -> Container
+Registry* should be visible.
+
+### 2. Configure the GitLab Runner for Docker-in-Docker
+
+Add to `/etc/gitlab-runner/config.toml` under `[runners.docker]`:
+
+```toml
+privileged = true
+volumes = ["/certs/client", "/cache"]
+```
+
+Restart: `sudo systemctl restart gitlab-runner`. This is required so the
+runner can build images via `docker:24-dind`.
+
+### 3. CI/CD variables (Project -> Settings -> CI/CD -> Variables)
+
+| Key               | Value                                              | Protected | Masked |
+|-------------------|----------------------------------------------------|-----------|--------|
+| `SSH_PRIVATE_KEY` | content of the deploy SSH private key (full file)  | off       | off    |
+| `DEPLOY_HOST`     | `gitlab.gitlab-servak` or its IP                   | off       | off    |
+| `DEPLOY_USER`     | `deploy`                                           | off       | off    |
+
+`Protected: off` is important - otherwise the variables are not exposed on the
+`dev` branch.
+
+## One-time server setup (the GitLab VM)
+
+### 4. Install Docker
+
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo systemctl enable --now docker
+```
+
+### 5. Create the deploy user
 
 ```bash
 sudo useradd -m -s /bin/bash deploy
-sudo mkdir -p /var/www/bazinga-prod/{api,client}
-sudo mkdir -p /var/www/bazinga-dev/{api,client}
+sudo usermod -aG docker deploy
+sudo mkdir -p /var/www/bazinga-prod /var/www/bazinga-dev
 sudo chown -R deploy:deploy /var/www/bazinga-prod /var/www/bazinga-dev
 ```
 
-## 3. Generate SSH key for CI
+### 6. SSH key for CI
 
 On any local machine:
 
@@ -32,101 +78,65 @@ ssh-keygen -t ed25519 -f gitlab_ci_key -N ""
 ssh-copy-id -i gitlab_ci_key.pub deploy@gitlab.gitlab-servak
 ```
 
-Add the **private key** content to GitLab:
-*Settings -> CI/CD -> Variables*
+Copy the **private key** content into the `SSH_PRIVATE_KEY` CI variable.
 
-| Key                | Value                            | Protected | Masked |
-|--------------------|----------------------------------|-----------|--------|
-| `SSH_PRIVATE_KEY`  | full content of `gitlab_ci_key`  | off       | off    |
-| `DEPLOY_HOST`      | `gitlab.gitlab-servak` (or IP)   | off       | off    |
-| `DEPLOY_USER`      | `deploy`                         | off       | off    |
+### 7. Trust the GitLab registry from the server
 
-> Important: turn **Protected** OFF, otherwise the variable is not available
-> for the `dev` branch.
-
-## 4. Install systemd services
+The registry on `gitlab.gitlab-servak:5050` likely uses a self-signed cert.
+Either install the CA into Docker:
 
 ```bash
-sudo cp deploy/bazinga-api-prod.service /etc/systemd/system/
-sudo cp deploy/bazinga-api-dev.service  /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable bazinga-api-prod bazinga-api-dev
+sudo mkdir -p /etc/docker/certs.d/gitlab.gitlab-servak:5050
+sudo cp /path/to/gitlab.crt /etc/docker/certs.d/gitlab.gitlab-servak:5050/ca.crt
+sudo systemctl restart docker
 ```
 
-Don't start them yet - they will fail until the first deploy uploads the DLLs.
-After the first successful pipeline run, start them:
+Or, for a lab environment, mark it as insecure in `/etc/docker/daemon.json`:
 
-```bash
-sudo systemctl start bazinga-api-prod
-sudo systemctl start bazinga-api-dev
-```
-
-## 5. Allow `deploy` to restart services without password
-
-```bash
-sudo cp deploy/sudoers-deploy /etc/sudoers.d/deploy
-sudo chmod 440 /etc/sudoers.d/deploy
-sudo visudo -c   # validate
-```
-
-## 6. nginx config (optional, for serving the client)
-
-`/etc/nginx/sites-available/bazinga-prod`:
-
-```nginx
-server {
-    listen 80;
-    server_name _;
-
-    root /var/www/bazinga-prod/client;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:5000/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $remote_addr;
-    }
+```json
+{
+  "insecure-registries": ["gitlab.gitlab-servak:5050"]
 }
 ```
 
-`/etc/nginx/sites-available/bazinga-dev`:
-
-```nginx
-server {
-    listen 8080;
-    server_name _;
-
-    root /var/www/bazinga-dev/client;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:5001/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $remote_addr;
-    }
-}
+```bash
+sudo systemctl restart docker
 ```
 
-Enable:
+## Trigger the pipeline
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/bazinga-prod /etc/nginx/sites-enabled/
-sudo ln -s /etc/nginx/sites-available/bazinga-dev  /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
+git push origin main   # triggers build_*_main + deploy_main
+git push origin dev    # triggers build_*_dev  + deploy_dev
 ```
 
-## 7. Trigger the pipeline
+After both pipelines turn green:
 
-Push any change to `main` or `dev`. After the pipeline finishes:
+- production: `http://gitlab.gitlab-servak/`
+- staging:    `http://gitlab.gitlab-servak:8080/`
 
-- prod is available at `http://gitlab.gitlab-servak/`
-- dev (staging) at `http://gitlab.gitlab-servak:8080/`
-- API logs: `journalctl -u bazinga-api-prod -f` (or `-dev`)
+## Useful commands on the server
+
+```bash
+# what is running
+cd /var/www/bazinga-prod && docker compose ps
+cd /var/www/bazinga-dev  && docker compose ps
+
+# logs
+docker compose logs -f api
+docker compose logs -f client
+
+# manual restart
+docker compose restart
+
+# stop everything
+docker compose down
+```
+
+## Screenshots for the report
+
+1. *Build -> Pipelines* with two green pipelines (`main` + `dev`)
+2. Each pipeline opened, showing build_* + deploy_* jobs all green
+3. *Deploy -> Container Registry* showing pushed images (`api:main`, `client:main`, `api:dev`, `client:dev`)
+4. *Operate -> Environments* with `production` and `staging` and their URLs
+5. On the server: `docker compose ps` output for both stacks, and `curl -I http://localhost/` and `curl -I http://localhost:8080/` returning 200

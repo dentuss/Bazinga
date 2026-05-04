@@ -1,3 +1,0 @@
-# /etc/sudoers.d/deploy
-# Allows the deploy user to restart Bazinga API services without a password
-deploy ALL=(ALL) NOPASSWD: /bin/systemctl restart bazinga-api-prod, /bin/systemctl restart bazinga-api-dev
