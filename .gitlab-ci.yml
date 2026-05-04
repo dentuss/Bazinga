@@ -1,0 +1,134 @@
+stages:
+  - build-main
+  - deploy-main
+  - build-dev
+  - deploy-dev
+
+variables:
+  DOCKER_TLS_CERTDIR: "/certs"
+  IMAGE_API: $CI_REGISTRY_IMAGE/api
+  IMAGE_CLIENT: $CI_REGISTRY_IMAGE/client
+
+.docker_build:
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+
+.ssh_deploy:
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+# ============ BUILD MAIN ============
+build_api_main:
+  extends: .docker_build
+  stage: build-main
+  script:
+    - docker build
+        -t "$IMAGE_API:main"
+        -t "$IMAGE_API:main-$CI_COMMIT_SHORT_SHA"
+        bazinga.api
+    - docker push "$IMAGE_API:main"
+    - docker push "$IMAGE_API:main-$CI_COMMIT_SHORT_SHA"
+  only:
+    - main
+
+build_client_main:
+  extends: .docker_build
+  stage: build-main
+  script:
+    - docker build
+        --build-arg BUILD_MODE=production
+        -t "$IMAGE_CLIENT:main"
+        -t "$IMAGE_CLIENT:main-$CI_COMMIT_SHORT_SHA"
+        bazinga.client
+    - docker push "$IMAGE_CLIENT:main"
+    - docker push "$IMAGE_CLIENT:main-$CI_COMMIT_SHORT_SHA"
+  only:
+    - main
+
+# ============ DEPLOY MAIN (production) ============
+deploy_main:
+  extends: .ssh_deploy
+  stage: deploy-main
+  script:
+    - scp docker-compose.yml "$DEPLOY_USER@$DEPLOY_HOST:/var/www/bazinga-prod/docker-compose.yml"
+    - |
+      ssh "$DEPLOY_USER@$DEPLOY_HOST" "cat > /var/www/bazinga-prod/.env <<EOF
+      API_IMAGE=$IMAGE_API:main
+      CLIENT_IMAGE=$IMAGE_CLIENT:main
+      HTTP_PORT=80
+      DOTNET_ENV=Production
+      COMPOSE_PROJECT_NAME=bazinga-prod
+      EOF"
+    - |
+      ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd /var/www/bazinga-prod && \
+        docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY && \
+        docker compose pull && \
+        docker compose up -d --remove-orphans && \
+        docker image prune -f"
+  environment:
+    name: production
+    url: http://$DEPLOY_HOST
+  only:
+    - main
+
+# ============ BUILD DEV ============
+build_api_dev:
+  extends: .docker_build
+  stage: build-dev
+  script:
+    - docker build
+        -t "$IMAGE_API:dev"
+        -t "$IMAGE_API:dev-$CI_COMMIT_SHORT_SHA"
+        bazinga.api
+    - docker push "$IMAGE_API:dev"
+    - docker push "$IMAGE_API:dev-$CI_COMMIT_SHORT_SHA"
+  only:
+    - dev
+
+build_client_dev:
+  extends: .docker_build
+  stage: build-dev
+  script:
+    - docker build
+        --build-arg BUILD_MODE=development
+        -t "$IMAGE_CLIENT:dev"
+        -t "$IMAGE_CLIENT:dev-$CI_COMMIT_SHORT_SHA"
+        bazinga.client
+    - docker push "$IMAGE_CLIENT:dev"
+    - docker push "$IMAGE_CLIENT:dev-$CI_COMMIT_SHORT_SHA"
+  only:
+    - dev
+
+# ============ DEPLOY DEV (staging) ============
+deploy_dev:
+  extends: .ssh_deploy
+  stage: deploy-dev
+  script:
+    - scp docker-compose.yml "$DEPLOY_USER@$DEPLOY_HOST:/var/www/bazinga-dev/docker-compose.yml"
+    - |
+      ssh "$DEPLOY_USER@$DEPLOY_HOST" "cat > /var/www/bazinga-dev/.env <<EOF
+      API_IMAGE=$IMAGE_API:dev
+      CLIENT_IMAGE=$IMAGE_CLIENT:dev
+      HTTP_PORT=8080
+      DOTNET_ENV=Development
+      COMPOSE_PROJECT_NAME=bazinga-dev
+      EOF"
+    - |
+      ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd /var/www/bazinga-dev && \
+        docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY && \
+        docker compose pull && \
+        docker compose up -d --remove-orphans && \
+        docker image prune -f"
+  environment:
+    name: staging
+    url: http://$DEPLOY_HOST:8080
+  only:
+    - dev

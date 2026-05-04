@@ -1,0 +1,28 @@
+services:
+  api:
+    image: ${API_IMAGE}
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${DOTNET_ENV:-Production}
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+    networks:
+      - bazinga
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ || exit 0"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  client:
+    image: ${CLIENT_IMAGE}
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on:
+      - api
+    networks:
+      - bazinga
+
+networks:
+  bazinga:
+    driver: bridge
