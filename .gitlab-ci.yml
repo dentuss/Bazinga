@@ -1,0 +1,105 @@
+stages:
+  - build-main
+  - deploy-main
+  - build-dev
+  - deploy-dev
+
+# ============ BUILD MAIN ============
+build_api_main:
+  stage: build-main
+  image: mcr.microsoft.com/dotnet/sdk:9.0
+  script:
+    - cd bazinga.api
+    - dotnet restore BazingaComics.sln
+    - dotnet publish BazingaComics.Api/BazingaComics.Api.csproj -c Release -o ../publish/api
+  artifacts:
+    paths:
+      - publish/api
+    expire_in: 1 day
+  only:
+    - main
+
+build_client_main:
+  stage: build-main
+  image: node:20
+  script:
+    - cd bazinga.client
+    - npm ci
+    - npm run build
+    - mv dist ../publish/client
+  artifacts:
+    paths:
+      - publish/client
+    expire_in: 1 day
+  only:
+    - main
+
+# ============ DEPLOY MAIN (production) ============
+deploy_main:
+  stage: deploy-main
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache openssh-client rsync
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+  script:
+    - rsync -avz --delete publish/api/    $DEPLOY_USER@$DEPLOY_HOST:/var/www/bazinga-prod/api/
+    - rsync -avz --delete publish/client/ $DEPLOY_USER@$DEPLOY_HOST:/var/www/bazinga-prod/client/
+    - ssh $DEPLOY_USER@$DEPLOY_HOST "sudo systemctl restart bazinga-api-prod"
+  environment:
+    name: production
+    url: http://$DEPLOY_HOST
+  only:
+    - main
+
+# ============ BUILD DEV ============
+build_api_dev:
+  stage: build-dev
+  image: mcr.microsoft.com/dotnet/sdk:9.0
+  script:
+    - cd bazinga.api
+    - dotnet restore BazingaComics.sln
+    - dotnet publish BazingaComics.Api/BazingaComics.Api.csproj -c Debug -o ../publish/api
+  artifacts:
+    paths:
+      - publish/api
+    expire_in: 1 day
+  only:
+    - dev
+
+build_client_dev:
+  stage: build-dev
+  image: node:20
+  script:
+    - cd bazinga.client
+    - npm ci
+    - npm run build -- --mode development
+    - mv dist ../publish/client
+  artifacts:
+    paths:
+      - publish/client
+    expire_in: 1 day
+  only:
+    - dev
+
+# ============ DEPLOY DEV (staging) ============
+deploy_dev:
+  stage: deploy-dev
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache openssh-client rsync
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+  script:
+    - rsync -avz --delete publish/api/    $DEPLOY_USER@$DEPLOY_HOST:/var/www/bazinga-dev/api/
+    - rsync -avz --delete publish/client/ $DEPLOY_USER@$DEPLOY_HOST:/var/www/bazinga-dev/client/
+    - ssh $DEPLOY_USER@$DEPLOY_HOST "sudo systemctl restart bazinga-api-dev"
+  environment:
+    name: staging
+    url: http://$DEPLOY_HOST:5001
+  only:
+    - dev

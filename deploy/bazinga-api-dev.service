@@ -1,0 +1,18 @@
+[Unit]
+Description=Bazinga API (staging/dev)
+After=network.target
+
+[Service]
+WorkingDirectory=/var/www/bazinga-dev/api
+ExecStart=/usr/bin/dotnet /var/www/bazinga-dev/api/BazingaComics.Api.dll
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=bazinga-api-dev
+User=deploy
+Environment=ASPNETCORE_ENVIRONMENT=Development
+Environment=ASPNETCORE_URLS=http://0.0.0.0:5001
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+
+[Install]
+WantedBy=multi-user.target
