@@ -7,18 +7,12 @@ import {
   ChevronLeft,
   ChevronDown,
   Info,
-  Search,
-  Bell,
-  User,
-  Menu,
   X,
   ThumbsUp,
   ThumbsDown,
-  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useAuth } from "@/contexts/AuthContext";
+import SiteHeader, { type SiteHeaderNavItem } from "@/components/SiteHeader";
 import heroBanner1 from "@/assets/hero-banner-1.jpg";
 import heroBanner2 from "@/assets/hero-banner-2.jpg";
 import heroBanner3 from "@/assets/hero-banner-3.jpg";
@@ -483,85 +477,25 @@ const ShowModal = ({ show, onClose }: { show: Show; onClose: () => void }) => (
   </div>
 );
 
+const tvNavItems: SiteHeaderNavItem[] = [
+  { label: "Home", href: "#continue-watching" },
+  { label: "Series", href: "#bazinga-originals" },
+  { label: "Anime", href: "#anime-universe" },
+  { label: "New & Popular", href: "#new-noteworthy" },
+  { label: "My List", href: "#top-10" },
+  { label: "Comics", to: "/comics", tone: "red", emphasize: true },
+];
+
 const BazingaTV = () => {
-  const { user } = useAuth();
   const [selectedShow, setSelectedShow] = useState<Show | null>(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-gradient-to-b from-background via-background/85 to-transparent backdrop-blur-sm">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-8">
-          <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-baseline gap-1 shrink-0">
-              <span className="text-2xl font-black tracking-tighter text-primary">BAZINGA</span>
-              <span className="text-2xl font-black tracking-tighter text-orange-500">TV</span>
-            </Link>
-            <nav className="hidden md:flex items-center gap-5 text-sm font-semibold text-foreground/85">
-              <a href="#continue-watching" className="hover:text-foreground transition-colors">
-                Home
-              </a>
-              <a href="#bazinga-originals" className="hover:text-foreground transition-colors">
-                Series
-              </a>
-              <a href="#anime-universe" className="hover:text-foreground transition-colors">
-                Anime
-              </a>
-              <a href="#new-noteworthy" className="hover:text-foreground transition-colors">
-                New & Popular
-              </a>
-              <a href="#top-10" className="hover:text-foreground transition-colors">
-                My List
-              </a>
-              <Link to="/comics" className="text-primary hover:text-primary/80 transition-colors">
-                Comics
-              </Link>
-            </nav>
-          </div>
-
-          <div className="flex items-center gap-2 md:gap-3">
-            <Button variant="ghost" size="icon" aria-label="Search">
-              <Search className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon" aria-label="Notifications" className="hidden sm:flex relative">
-              <Bell className="h-5 w-5" />
-              <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-orange-500" />
-            </Button>
-            <Link to="/bazinga-unlimited" className="hidden sm:block">
-              <Button className="bg-gradient-to-r from-primary via-primary to-orange-500 hover:from-primary/90 hover:via-primary/90 hover:to-orange-600 text-white font-bold uppercase tracking-wider shadow-lg shadow-[hsl(var(--shadow-glow))] border-0">
-                <Sparkles className="h-4 w-4" />
-                Join Now
-              </Button>
-            </Link>
-            {user ? (
-              <Link to="/profile" aria-label="Profile">
-                <Avatar className="h-9 w-9 border border-orange-500/40 ring-1 ring-orange-500/30">
-                  {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt={user.username} /> : null}
-                  <AvatarFallback className="bg-muted text-muted-foreground">
-                    <User className="h-4 w-4" />
-                  </AvatarFallback>
-                </Avatar>
-              </Link>
-            ) : (
-              <Link to="/auth">
-                <Button className="bg-orange-500 text-black hover:bg-orange-600 font-bold">
-                  Sign In
-                </Button>
-              </Link>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Open menu"
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-      </header>
+      <SiteHeader
+        brand={{ layout: "inline", accentText: "TV", accentColor: "orange" }}
+        navItems={tvNavItems}
+        avatarAccent="orange"
+      />
 
       {/* Hero */}
       <section className="relative h-[80vh] min-h-[520px] -mt-16">
@@ -627,7 +561,7 @@ const BazingaTV = () => {
       </section>
 
       {/* Rows */}
-      <main className="relative z-10 -mt-20 md:-mt-32 space-y-2 pb-20">
+      <main className="relative z-10 pt-4 md:pt-8 space-y-2 pb-20">
         <ContinueWatchingRow items={continueWatching} />
         <TopTenRow items={topTen} onSelect={(s) => setSelectedShow(s)} />
         {rows.map((row) => (
@@ -651,64 +585,6 @@ const BazingaTV = () => {
       </footer>
 
       {selectedShow && <ShowModal show={selectedShow} onClose={() => setSelectedShow(null)} />}
-
-      {/* Mobile menu */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-[70] md:hidden">
-          <div className="absolute inset-0 bg-black/70" onClick={() => setMobileMenuOpen(false)} />
-          <div className="absolute right-0 top-0 h-screen w-[85%] max-w-xs bg-background shadow-xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-border px-4 py-4">
-              <span className="text-lg font-bold">Menu</span>
-              <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu">
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
-              <a
-                href="#continue-watching"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block rounded-md px-3 py-2 text-sm font-semibold text-foreground/80 hover:bg-muted hover:text-foreground"
-              >
-                Home
-              </a>
-              {rows.map((row) => (
-                <a
-                  key={row.title}
-                  href={`#${row.title.replace(/\s+/g, "-").toLowerCase()}`}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block rounded-md px-3 py-2 text-sm font-semibold text-foreground/80 hover:bg-muted hover:text-foreground"
-                >
-                  {row.title}
-                </a>
-              ))}
-              <Link
-                to="/comics"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block rounded-md px-3 py-2 text-sm font-semibold text-primary hover:bg-muted"
-              >
-                Bazinga Comics
-              </Link>
-              <Link
-                to="/bazinga-unlimited"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block"
-              >
-                <Button className="w-full bg-gradient-to-r from-primary via-primary to-orange-500 text-white font-bold uppercase tracking-wider mt-3 border-0">
-                  <Sparkles className="h-4 w-4" />
-                  Join Now
-                </Button>
-              </Link>
-              <Link
-                to="/"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block rounded-md px-3 py-2 text-sm font-semibold text-foreground/80 hover:bg-muted hover:text-foreground"
-              >
-                Switch experience
-              </Link>
-            </nav>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

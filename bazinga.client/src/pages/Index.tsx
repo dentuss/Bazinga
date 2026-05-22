@@ -124,7 +124,9 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <Header />
       <main>
-        <HeroCarousel />
+        <div className="-mt-16">
+          <HeroCarousel />
+        </div>
         <BrowseByFilter
           onFilterChange={handleBrowseFilterChange}
           seriesOptions={browseOptions.series}
