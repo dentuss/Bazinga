@@ -5,12 +5,16 @@ import {
   Plus,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   Info,
   Search,
   Bell,
   User,
   Menu,
   X,
+  ThumbsUp,
+  ThumbsDown,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -31,14 +35,27 @@ type Show = {
   id: string;
   title: string;
   poster: string;
+  backdrop?: string;
   year: number;
   rating: string;
   seasons?: number;
+  matchPercent: number;
   genres: string[];
+  tags: string[];
   description: string;
 };
 
+type ContinueWatching = {
+  id: string;
+  title: string;
+  episode: string;
+  backdrop: string;
+  progress: number;
+  newEpisodes?: boolean;
+};
+
 const posters = [comic1, comic2, comic3, comic4, comic5, comic6, comic7, comic8];
+const backdrops = [heroBanner1, heroBanner2, heroBanner3];
 
 const buildShow = (
   id: string,
@@ -49,10 +66,19 @@ const buildShow = (
   id,
   title,
   poster: posters[index % posters.length],
+  backdrop: backdrops[index % backdrops.length],
   year: 2024 - (index % 5),
   rating: ["TV-14", "TV-MA", "TV-PG"][index % 3],
   seasons: 1 + (index % 4),
-  genres: ["Action", "Sci-Fi", "Anime"].slice(0, 2 + (index % 2)),
+  matchPercent: 78 + ((index * 3) % 22),
+  genres: ["Action", "Sci-Fi", "Anime", "Drama", "Mystery", "Thriller"].slice(
+    index % 3,
+    (index % 3) + 3
+  ),
+  tags: ["Unconventional", "Dark", "Cinematic", "Mind-Bending", "Heartfelt"].slice(
+    index % 3,
+    (index % 3) + 3
+  ),
   description:
     meta.description ??
     "A legendary tale from the Bazinga multiverse — heroes rise, empires fall, and the cosmos shifts forever.",
@@ -68,15 +94,34 @@ const heroFeatured = {
   badges: ["NEW SEASON", "TOP 10 TODAY"],
 };
 
+const continueWatching: ContinueWatching[] = [
+  { id: "cw1", title: "Heroes of Bazinga", episode: "S2:E4 The Edge of Forever", backdrop: heroBanner1, progress: 64, newEpisodes: true },
+  { id: "cw2", title: "Shadow Legion", episode: "S1:E8 Last Light", backdrop: heroBanner2, progress: 32 },
+  { id: "cw3", title: "Spirit of the Blade", episode: "S3:E2 The Cold Vow", backdrop: heroBanner3, progress: 88 },
+  { id: "cw4", title: "Neon Knights", episode: "S2:E12 Velvet Static", backdrop: heroBanner2, progress: 15, newEpisodes: true },
+  { id: "cw5", title: "Crimson Empire", episode: "S1:E3 Burnmark", backdrop: heroBanner3, progress: 50 },
+];
+
+const topTen: Show[] = [
+  buildShow("top1", "Heroes of Bazinga", 0),
+  buildShow("top2", "Crimson Empire", 1),
+  buildShow("top3", "Shadow Legion", 2),
+  buildShow("top4", "Neon Knights", 3),
+  buildShow("top5", "Eternal Sentinels", 4),
+  buildShow("top6", "Cosmic Showdown", 5),
+  buildShow("top7", "Rogue Galaxy", 6),
+  buildShow("top8", "Dark Horizon", 7),
+  buildShow("top9", "Spirit of the Blade", 1),
+  buildShow("top10", "Mecha Pulse", 3),
+];
+
 const trending: Show[] = [
-  buildShow("t1", "Heroes of Bazinga", 0),
-  buildShow("t2", "Crimson Empire", 1),
-  buildShow("t3", "Shadow Legion", 2),
-  buildShow("t4", "Neon Knights", 3),
-  buildShow("t5", "Eternal Sentinels", 4),
-  buildShow("t6", "Cosmic Showdown", 5),
-  buildShow("t7", "Rogue Galaxy", 6),
-  buildShow("t8", "Dark Horizon", 7),
+  buildShow("t1", "Veil of Heroes", 4),
+  buildShow("t2", "After Midnight City", 5),
+  buildShow("t3", "Project Apex", 6),
+  buildShow("t4", "Children of the Forge", 0),
+  buildShow("t5", "Phantom Lattice", 5),
+  buildShow("t6", "Hollow Suns", 6),
 ];
 
 const anime: Show[] = [
@@ -115,18 +160,83 @@ const rows: Row[] = [
   { title: "New & Noteworthy", shows: newReleases },
 ];
 
+const scrollRail = (id: string, dir: -1 | 1) => () => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior: "smooth" });
+};
+
+const railId = (title: string) => `rail-${title.replace(/\s+/g, "-").toLowerCase()}`;
+
+const ShowCard = ({ show, onSelect }: { show: Show; onSelect: (s: Show) => void }) => (
+  <div className="relative shrink-0 w-40 md:w-52 snap-start" style={{ aspectRatio: "2 / 3" }}>
+    <button
+      type="button"
+      onClick={() => onSelect(show)}
+      className="group/card absolute inset-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-md transition-all duration-300 ease-out hover:scale-[1.15] hover:z-30 origin-center"
+    >
+      <div className="relative h-full rounded-md overflow-hidden bg-card shadow-lg group-hover/card:shadow-2xl group-hover/card:shadow-orange-500/30 ring-0 group-hover/card:ring-2 group-hover/card:ring-orange-500/60 transition-shadow">
+        <img
+          src={show.poster}
+          alt={show.title}
+          className="h-full w-full object-cover transition-transform duration-500"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent" />
+
+        {/* Default footer */}
+        <div className="absolute bottom-2 left-2 right-2 transition-opacity duration-200 group-hover/card:opacity-0">
+          <p className="text-sm md:text-base font-bold text-white drop-shadow line-clamp-2">
+            {show.title}
+          </p>
+          <p className="text-[10px] md:text-xs text-white/70 uppercase tracking-wider">
+            {show.year} · {show.rating}
+          </p>
+        </div>
+
+        {/* Hover preview overlay */}
+        <div className="absolute inset-x-0 bottom-0 p-3 opacity-0 translate-y-2 group-hover/card:opacity-100 group-hover/card:translate-y-0 transition-all duration-300 bg-gradient-to-t from-black via-black/90 to-transparent">
+          <p className="text-sm md:text-base font-bold text-white drop-shadow line-clamp-2 mb-2">
+            {show.title}
+          </p>
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="grid place-items-center h-7 w-7 rounded-full bg-white text-black hover:bg-white/85">
+              <Play className="h-3.5 w-3.5 fill-current" />
+            </span>
+            <span className="grid place-items-center h-7 w-7 rounded-full border border-white/40 text-white hover:border-white">
+              <Plus className="h-3.5 w-3.5" />
+            </span>
+            <span className="grid place-items-center h-7 w-7 rounded-full border border-white/40 text-white hover:border-white">
+              <ThumbsUp className="h-3.5 w-3.5" />
+            </span>
+            <span className="ml-auto grid place-items-center h-7 w-7 rounded-full border border-white/40 text-white hover:border-white">
+              <ChevronDown className="h-3.5 w-3.5" />
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-[10px] md:text-xs">
+            <span className="font-bold text-green-500">{show.matchPercent}% Match</span>
+            <span className="border border-white/40 px-1 py-px text-white/80">{show.rating}</span>
+            {show.seasons ? <span className="text-white/80">{show.seasons} Seasons</span> : null}
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-x-1.5 text-[10px] text-white/70">
+            {show.tags.map((t, i) => (
+              <span key={t}>
+                {t}
+                {i < show.tags.length - 1 ? " ·" : ""}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </button>
+  </div>
+);
+
 const ShowRow = ({ row, onSelect }: { row: Row; onSelect: (s: Show) => void }) => {
-  const scrollRef = (id: string) => (dir: -1 | 1) => () => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: "smooth" });
-  };
-  const railId = `rail-${row.title.replace(/\s+/g, "-").toLowerCase()}`;
-  const scroll = scrollRef(railId);
+  const id = railId(row.title);
 
   return (
-    <section className="relative py-4 md:py-6">
-      <div className="container mx-auto px-4 mb-3 flex items-center justify-between">
+    <section className="relative py-4 md:py-6" id={row.title.replace(/\s+/g, "-").toLowerCase()}>
+      <div className="container mx-auto px-4 md:px-8 mb-3 flex items-center justify-between">
         <h3 className="text-xl md:text-2xl font-black tracking-tight">{row.title}</h3>
         <span className="text-xs font-semibold uppercase tracking-widest text-orange-500/80">
           Explore all
@@ -135,7 +245,7 @@ const ShowRow = ({ row, onSelect }: { row: Row; onSelect: (s: Show) => void }) =
       <div className="relative group/row">
         <button
           type="button"
-          onClick={scroll(-1)}
+          onClick={scrollRail(id, -1)}
           className="hidden md:flex absolute left-0 top-0 bottom-0 z-20 w-12 items-center justify-center bg-gradient-to-r from-background via-background/70 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"
           aria-label="Scroll left"
         >
@@ -143,7 +253,7 @@ const ShowRow = ({ row, onSelect }: { row: Row; onSelect: (s: Show) => void }) =
         </button>
         <button
           type="button"
-          onClick={scroll(1)}
+          onClick={scrollRail(id, 1)}
           className="hidden md:flex absolute right-0 top-0 bottom-0 z-20 w-12 items-center justify-center bg-gradient-to-l from-background via-background/70 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"
           aria-label="Scroll right"
         >
@@ -151,36 +261,161 @@ const ShowRow = ({ row, onSelect }: { row: Row; onSelect: (s: Show) => void }) =
         </button>
 
         <div
-          id={railId}
-          className="flex gap-3 md:gap-4 overflow-x-auto px-4 md:px-8 pb-2 scroll-smooth snap-x snap-mandatory"
+          id={id}
+          className="flex gap-3 md:gap-4 overflow-x-auto px-4 md:px-8 pb-10 pt-10 scroll-smooth snap-x snap-mandatory"
+          style={{ scrollbarWidth: "none" }}
         >
           {row.shows.map((show) => (
+            <ShowCard key={show.id} show={show} onSelect={onSelect} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const ContinueWatchingRow = ({ items }: { items: ContinueWatching[] }) => {
+  const id = railId("continue-watching");
+  return (
+    <section className="relative py-4 md:py-6" id="continue-watching">
+      <div className="container mx-auto px-4 md:px-8 mb-3">
+        <h3 className="text-xl md:text-2xl font-black tracking-tight">Continue Watching</h3>
+      </div>
+      <div className="relative group/row">
+        <button
+          type="button"
+          onClick={scrollRail(id, -1)}
+          className="hidden md:flex absolute left-0 top-0 bottom-0 z-20 w-12 items-center justify-center bg-gradient-to-r from-background via-background/70 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"
+          aria-label="Scroll left"
+        >
+          <ChevronLeft className="h-8 w-8" />
+        </button>
+        <button
+          type="button"
+          onClick={scrollRail(id, 1)}
+          className="hidden md:flex absolute right-0 top-0 bottom-0 z-20 w-12 items-center justify-center bg-gradient-to-l from-background via-background/70 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"
+          aria-label="Scroll right"
+        >
+          <ChevronRight className="h-8 w-8" />
+        </button>
+        <div
+          id={id}
+          className="flex gap-3 md:gap-4 overflow-x-auto px-4 md:px-8 pb-6 pt-2 scroll-smooth snap-x snap-mandatory"
+          style={{ scrollbarWidth: "none" }}
+        >
+          {items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="group/cw shrink-0 w-72 md:w-80 snap-start text-left outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-md overflow-hidden"
+            >
+              <div className="relative aspect-video overflow-hidden rounded-md bg-card shadow-lg transition-transform duration-300 group-hover/cw:scale-[1.03]">
+                <img src={item.backdrop} alt={item.title} className="h-full w-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+
+                {/* Badges */}
+                {item.newEpisodes && (
+                  <span className="absolute top-2 left-2 bg-orange-500 text-black text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded">
+                    New Episodes
+                  </span>
+                )}
+
+                {/* Hover play */}
+                <div className="absolute inset-0 grid place-items-center opacity-0 group-hover/cw:opacity-100 transition-opacity">
+                  <span className="grid place-items-center h-14 w-14 rounded-full bg-white/95 text-black shadow-2xl">
+                    <Play className="h-6 w-6 fill-current" />
+                  </span>
+                </div>
+
+                {/* Info */}
+                <div className="absolute bottom-3 left-3 right-3">
+                  <p className="text-sm md:text-base font-bold text-white drop-shadow line-clamp-1">
+                    {item.title}
+                  </p>
+                  <p className="text-[11px] md:text-xs text-white/80 line-clamp-1">{item.episode}</p>
+                </div>
+
+                {/* Progress bar */}
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/15">
+                  <div
+                    className="h-full bg-orange-500"
+                    style={{ width: `${item.progress}%` }}
+                  />
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const TopTenRow = ({ items, onSelect }: { items: Show[]; onSelect: (s: Show) => void }) => {
+  const id = railId("top-10");
+  return (
+    <section className="relative py-4 md:py-6" id="top-10">
+      <div className="container mx-auto px-4 md:px-8 mb-3 flex items-center gap-3">
+        <span className="grid place-items-center h-7 w-7 rounded-sm bg-orange-500 text-black text-xs font-black">
+          10
+        </span>
+        <h3 className="text-xl md:text-2xl font-black tracking-tight">Top 10 in Bazinga Today</h3>
+      </div>
+      <div className="relative group/row">
+        <button
+          type="button"
+          onClick={scrollRail(id, -1)}
+          className="hidden md:flex absolute left-0 top-0 bottom-0 z-20 w-12 items-center justify-center bg-gradient-to-r from-background via-background/70 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"
+          aria-label="Scroll left"
+        >
+          <ChevronLeft className="h-8 w-8" />
+        </button>
+        <button
+          type="button"
+          onClick={scrollRail(id, 1)}
+          className="hidden md:flex absolute right-0 top-0 bottom-0 z-20 w-12 items-center justify-center bg-gradient-to-l from-background via-background/70 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"
+          aria-label="Scroll right"
+        >
+          <ChevronRight className="h-8 w-8" />
+        </button>
+        <div
+          id={id}
+          className="flex gap-2 md:gap-4 overflow-x-auto px-4 md:px-8 pb-10 pt-6 scroll-smooth snap-x snap-mandatory"
+          style={{ scrollbarWidth: "none" }}
+        >
+          {items.map((show, idx) => (
             <button
               key={show.id}
               type="button"
               onClick={() => onSelect(show)}
-              className="group/card relative shrink-0 w-40 md:w-56 snap-start text-left outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-md overflow-hidden"
+              className="group/top relative shrink-0 flex items-end snap-start outline-none"
             >
-              <div className="relative aspect-[2/3] overflow-hidden rounded-md bg-card">
-                <img
-                  src={show.poster}
-                  alt={show.title}
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover/card:scale-110"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
-                <div className="absolute bottom-2 left-2 right-2">
-                  <p className="text-sm md:text-base font-bold text-white drop-shadow line-clamp-2">
-                    {show.title}
-                  </p>
-                  <p className="text-[10px] md:text-xs text-white/70 uppercase tracking-wider">
-                    {show.year} · {show.rating}
-                  </p>
+              {/* Big number */}
+              <span
+                className="font-black leading-[0.75] select-none pointer-events-none"
+                style={{
+                  fontSize: "clamp(140px, 22vw, 240px)",
+                  WebkitTextStroke: "3px hsl(0 0% 100% / 0.45)",
+                  color: "transparent",
+                  fontFamily: "Inter, system-ui, sans-serif",
+                  textShadow: "0 0 60px rgba(0,0,0,0.4)",
+                }}
+              >
+                {idx + 1}
+              </span>
+
+              {/* Poster */}
+              <div
+                className="-ml-6 md:-ml-10 w-28 md:w-44 z-10 relative transition-transform duration-300 group-hover/top:scale-105"
+                style={{ aspectRatio: "2 / 3" }}
+              >
+                <div className="relative h-full rounded-md overflow-hidden shadow-2xl ring-0 group-hover/top:ring-2 group-hover/top:ring-orange-500/70">
+                  <img src={show.poster} alt={show.title} className="h-full w-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                  <div className="absolute bottom-2 left-2 right-2">
+                    <p className="text-xs md:text-sm font-bold text-white line-clamp-2">{show.title}</p>
+                  </div>
                 </div>
-                <div className="absolute inset-0 opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 ring-2 ring-orange-500 rounded-md" />
-                <div
-                  className="absolute inset-0 opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"
-                  style={{ boxShadow: "0 0 30px hsl(25 95% 55% / 0.55)" }}
-                />
               </div>
             </button>
           ))}
@@ -202,19 +437,19 @@ const ShowModal = ({ show, onClose }: { show: Show; onClose: () => void }) => (
         <X className="h-5 w-5" />
       </button>
       <div className="relative aspect-video">
-        <img src={show.poster} alt={show.title} className="absolute inset-0 h-full w-full object-cover" />
+        <img
+          src={show.backdrop ?? show.poster}
+          alt={show.title}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-card via-card/60 to-transparent" />
         <div className="absolute bottom-4 left-6 right-6">
           <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white">{show.title}</h2>
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-white/80">
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-white/85">
+            <span className="font-bold text-green-500">{show.matchPercent}% Match</span>
             <span>{show.year}</span>
             <span className="border border-white/40 px-2 py-0.5 text-xs">{show.rating}</span>
             {show.seasons ? <span>{show.seasons} Season{show.seasons > 1 ? "s" : ""}</span> : null}
-            {show.genres.map((g) => (
-              <span key={g} className="text-orange-400">
-                · {g}
-              </span>
-            ))}
           </div>
         </div>
       </div>
@@ -222,11 +457,26 @@ const ShowModal = ({ show, onClose }: { show: Show; onClose: () => void }) => (
         <p className="text-sm text-muted-foreground leading-relaxed">{show.description}</p>
         <div className="flex flex-wrap gap-3">
           <Button className="bg-orange-500 text-black hover:bg-orange-600 font-bold">
-            <Play className="h-4 w-4" /> Play
+            <Play className="h-4 w-4 fill-current" /> Play
           </Button>
           <Button variant="outline" className="border-orange-500/60 text-orange-400 hover:bg-orange-500/10">
             <Plus className="h-4 w-4" /> My List
           </Button>
+          <Button variant="ghost" className="text-white hover:bg-white/10">
+            <ThumbsUp className="h-4 w-4" /> Like
+          </Button>
+          <Button variant="ghost" className="text-white hover:bg-white/10">
+            <ThumbsDown className="h-4 w-4" /> Not for me
+          </Button>
+        </div>
+        <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+          <span className="text-white/70">Genres:</span>
+          {show.genres.map((g, i) => (
+            <span key={g} className="text-orange-400">
+              {g}
+              {i < show.genres.length - 1 ? "," : ""}
+            </span>
+          ))}
         </div>
       </div>
     </div>
@@ -242,38 +492,48 @@ const BazingaTV = () => {
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-gradient-to-b from-background via-background/85 to-transparent backdrop-blur-sm">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-8">
           <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-baseline gap-1">
+            <Link to="/" className="flex items-baseline gap-1 shrink-0">
               <span className="text-2xl font-black tracking-tighter text-primary">BAZINGA</span>
               <span className="text-2xl font-black tracking-tighter text-orange-500">TV</span>
             </Link>
-            <nav className="hidden md:flex items-center gap-5 text-sm font-semibold text-foreground/80">
-              <a href="#trending-now" className="hover:text-foreground transition-colors">
+            <nav className="hidden md:flex items-center gap-5 text-sm font-semibold text-foreground/85">
+              <a href="#continue-watching" className="hover:text-foreground transition-colors">
                 Home
               </a>
               <a href="#bazinga-originals" className="hover:text-foreground transition-colors">
-                Originals
+                Series
               </a>
               <a href="#anime-universe" className="hover:text-foreground transition-colors">
                 Anime
               </a>
               <a href="#new-noteworthy" className="hover:text-foreground transition-colors">
-                New
+                New & Popular
               </a>
-              <Link to="/comics" className="hover:text-foreground transition-colors">
+              <a href="#top-10" className="hover:text-foreground transition-colors">
+                My List
+              </a>
+              <Link to="/comics" className="text-primary hover:text-primary/80 transition-colors">
                 Comics
               </Link>
             </nav>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
             <Button variant="ghost" size="icon" aria-label="Search">
               <Search className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" aria-label="Notifications" className="hidden sm:flex">
+            <Button variant="ghost" size="icon" aria-label="Notifications" className="hidden sm:flex relative">
               <Bell className="h-5 w-5" />
+              <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-orange-500" />
             </Button>
+            <Link to="/bazinga-unlimited" className="hidden sm:block">
+              <Button className="bg-gradient-to-r from-primary via-primary to-orange-500 hover:from-primary/90 hover:via-primary/90 hover:to-orange-600 text-white font-bold uppercase tracking-wider shadow-lg shadow-[hsl(var(--shadow-glow))] border-0">
+                <Sparkles className="h-4 w-4" />
+                Join Now
+              </Button>
+            </Link>
             {user ? (
               <Link to="/profile" aria-label="Profile">
                 <Avatar className="h-9 w-9 border border-orange-500/40 ring-1 ring-orange-500/30">
@@ -318,7 +578,7 @@ const BazingaTV = () => {
           />
         </div>
 
-        <div className="relative z-10 container mx-auto h-full px-4 flex items-end pb-16 md:pb-24">
+        <div className="relative z-10 container mx-auto h-full px-4 md:px-8 flex items-end pb-16 md:pb-24">
           <div className="max-w-2xl space-y-5">
             <div className="flex flex-wrap gap-2">
               {heroFeatured.badges.map((b) => (
@@ -340,19 +600,23 @@ const BazingaTV = () => {
             <div className="flex flex-wrap gap-3 pt-2">
               <Button
                 size="lg"
-                className="bg-orange-500 text-black hover:bg-orange-600 font-bold shadow-[0_0_30px_hsl(25_95%_55%/0.6)]"
+                className="bg-white text-black hover:bg-white/90 font-bold"
                 onClick={() =>
-                  setSelectedShow(buildShow("hero", heroFeatured.title, 0, { description: heroFeatured.description }))
+                  setSelectedShow(
+                    buildShow("hero", heroFeatured.title, 0, { description: heroFeatured.description })
+                  )
                 }
               >
-                <Play className="h-5 w-5" /> Play
+                <Play className="h-5 w-5 fill-current" /> Play
               </Button>
               <Button
                 size="lg"
                 variant="outline"
                 className="border-white/30 text-white hover:bg-white/10"
                 onClick={() =>
-                  setSelectedShow(buildShow("hero", heroFeatured.title, 0, { description: heroFeatured.description }))
+                  setSelectedShow(
+                    buildShow("hero", heroFeatured.title, 0, { description: heroFeatured.description })
+                  )
                 }
               >
                 <Info className="h-5 w-5" /> More Info
@@ -363,17 +627,17 @@ const BazingaTV = () => {
       </section>
 
       {/* Rows */}
-      <main className="relative z-10 -mt-16 md:-mt-24 space-y-2 pb-20">
+      <main className="relative z-10 -mt-20 md:-mt-32 space-y-2 pb-20">
+        <ContinueWatchingRow items={continueWatching} />
+        <TopTenRow items={topTen} onSelect={(s) => setSelectedShow(s)} />
         {rows.map((row) => (
-          <div id={row.title.replace(/\s+/g, "-").toLowerCase()} key={row.title}>
-            <ShowRow row={row} onSelect={(s) => setSelectedShow(s)} />
-          </div>
+          <ShowRow key={row.title} row={row} onSelect={(s) => setSelectedShow(s)} />
         ))}
       </main>
 
       {/* Footer */}
       <footer className="border-t border-border/60 py-10">
-        <div className="container mx-auto px-4 text-sm text-muted-foreground flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="container mx-auto px-4 md:px-8 text-sm text-muted-foreground flex flex-col md:flex-row gap-4 items-center justify-between">
           <p>©2025 BAZINGA TV. Streaming the multiverse.</p>
           <div className="flex items-center gap-4">
             <Link to="/" className="hover:text-foreground transition-colors">
@@ -400,6 +664,13 @@ const BazingaTV = () => {
               </Button>
             </div>
             <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+              <a
+                href="#continue-watching"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block rounded-md px-3 py-2 text-sm font-semibold text-foreground/80 hover:bg-muted hover:text-foreground"
+              >
+                Home
+              </a>
               {rows.map((row) => (
                 <a
                   key={row.title}
@@ -413,9 +684,19 @@ const BazingaTV = () => {
               <Link
                 to="/comics"
                 onClick={() => setMobileMenuOpen(false)}
-                className="block rounded-md px-3 py-2 text-sm font-semibold text-foreground/80 hover:bg-muted hover:text-foreground"
+                className="block rounded-md px-3 py-2 text-sm font-semibold text-primary hover:bg-muted"
               >
                 Bazinga Comics
+              </Link>
+              <Link
+                to="/bazinga-unlimited"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block"
+              >
+                <Button className="w-full bg-gradient-to-r from-primary via-primary to-orange-500 text-white font-bold uppercase tracking-wider mt-3 border-0">
+                  <Sparkles className="h-4 w-4" />
+                  Join Now
+                </Button>
               </Link>
               <Link
                 to="/"

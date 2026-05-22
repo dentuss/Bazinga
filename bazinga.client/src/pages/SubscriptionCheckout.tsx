@@ -21,16 +21,19 @@ const SubscriptionCheckout = () => {
   const [orderComplete, setOrderComplete] = useState(false);
 
   const { planLabel, billingLabel, price } = useMemo(() => {
-    const normalizedPlan = planParam.toLowerCase() === "unlimited" ? "Unlimited" : "Premium";
-    const normalizedBilling = billingParam === "yearly" ? "yearly" : "monthly";
+    const lower = planParam.toLowerCase();
+    const normalizedPlan: "Comics" | "TV" | "Unlimited" =
+      lower === "tv" ? "TV" : lower === "unlimited" ? "Unlimited" : "Comics";
+    const normalizedBilling: "monthly" | "yearly" = billingParam === "yearly" ? "yearly" : "monthly";
     const priceMap = {
-      Premium: { monthly: 4.99, yearly: 49.99 },
-      Unlimited: { monthly: 14.99, yearly: 159.99 },
-    };
+      Comics: { monthly: 7.99, yearly: 79.99 },
+      TV: { monthly: 9.99, yearly: 99.99 },
+      Unlimited: { monthly: 14.99, yearly: 149.99 },
+    } as const;
     return {
       planLabel: normalizedPlan,
       billingLabel: normalizedBilling,
-      price: priceMap[normalizedPlan as "Premium" | "Unlimited"][normalizedBilling as "monthly" | "yearly"],
+      price: priceMap[normalizedPlan][normalizedBilling],
     };
   }, [billingParam, planParam]);
 
@@ -96,7 +99,7 @@ const SubscriptionCheckout = () => {
             </div>
             <h1 className="text-3xl font-bold mb-4">Subscription Complete!</h1>
             <p className="text-muted-foreground mb-8">
-              Your Bazinga {planLabel} plan is now active. Enjoy your benefits and start reading.
+              Your Bazinga {planLabel} plan is now active. Enjoy your benefits and dive in.
             </p>
             <Link to="/profile">
               <Button variant="default" size="lg">
