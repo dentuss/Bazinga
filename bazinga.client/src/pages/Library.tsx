@@ -50,7 +50,7 @@ const Library = () => {
           ) : items.length === 0 ? (
             <div className="max-w-2xl mx-auto text-center space-y-4">
               <p className="text-muted-foreground">Your library is empty. Start exploring Digital Read comics.</p>
-              <Link to="/?view=digital">
+              <Link to="/comics?view=digital">
                 <Button size="lg">Browse Digital Read</Button>
               </Link>
             </div>
