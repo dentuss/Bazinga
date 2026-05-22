@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/contexts/CartContext";
 import { WishlistProvider } from "@/contexts/WishlistContext";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
@@ -20,8 +20,16 @@ import SubscriptionCheckout from "./pages/SubscriptionCheckout";
 import Library from "./pages/Library";
 import ComicReader from "./pages/ComicReader";
 import UnderConstruction from "./pages/UnderConstruction";
+import Landing from "./pages/Landing";
+import Choice from "./pages/Choice";
+import BazingaTV from "./pages/BazingaTV";
 
 const queryClient = new QueryClient();
+
+const RootGate = () => {
+  const { user } = useAuth();
+  return user ? <Choice /> : <Landing />;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -33,7 +41,9 @@ const App = () => (
             <Sonner />
             <BrowserRouter>
               <Routes>
-                <Route path="/" element={<Index />} />
+                <Route path="/" element={<RootGate />} />
+                <Route path="/comics" element={<Index />} />
+                <Route path="/bazinga-tv" element={<BazingaTV />} />
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/checkout" element={<Checkout />} />
                 <Route path="/auth" element={<Auth />} />

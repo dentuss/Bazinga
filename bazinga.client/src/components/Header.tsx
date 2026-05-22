@@ -37,7 +37,7 @@ const Header = () => {
   const gamesSubmenu = ["Video Games", "Mobile Games", "Board Games"];
   const mobileNavItems = [
     { label: "NEWS", to: "/news" },
-    { label: "COMICS", to: "/?view=all" },
+    { label: "COMICS", to: "/comics?view=all" },
     { label: "CHARACTERS", to: "/#characters" },
     { label: "MOVIES", to: "/#movies" },
     { label: "TV SHOWS", to: "/#tv-shows" },
@@ -48,13 +48,13 @@ const Header = () => {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      navigate(`/?search=${encodeURIComponent(searchQuery.trim())}`);
+      navigate(`/comics?search=${encodeURIComponent(searchQuery.trim())}`);
       setSearchOpen(false);
     }
   };
 
   const handleComicsView = (view: "all" | "digital") => {
-    navigate(`/?view=${view}`);
+    navigate(`/comics?view=${view}`);
   };
 
   return (

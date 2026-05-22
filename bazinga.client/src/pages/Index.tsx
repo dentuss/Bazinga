@@ -199,7 +199,7 @@ const Index = () => {
               id="digital-read" 
               title="DIGITAL EXCLUSIVE" 
               comics={digitalRead}
-              viewAllHref="/?view=digital"
+              viewAllHref="/comics?view=digital"
               onComicClick={handleComicClick}
             />
             <UnlimitedBanner />
@@ -207,7 +207,7 @@ const Index = () => {
               id="all-comics"
               title="ALL COMICS"
               comics={allComics}
-              viewAllHref="/?view=all"
+              viewAllHref="/comics?view=all"
               onComicClick={handleComicClick}
             />
           </>
