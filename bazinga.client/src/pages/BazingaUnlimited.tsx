@@ -4,29 +4,74 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { BookOpen, Tv, Sparkles, Check } from "lucide-react";
 
-const plans = [
+type Plan = {
+  id: "Comics" | "TV" | "Unlimited";
+  name: string;
+  tagline: string;
+  monthly: number;
+  yearly: number;
+  benefits: string[];
+  accentBorder: string;
+  accentText: string;
+  accentBg: string;
+  icon: typeof BookOpen;
+  highlight?: boolean;
+};
+
+const plans: Plan[] = [
   {
-    name: "Bazinga Premium",
-    accent: "border-orange-500",
-    accentText: "text-orange-500",
-    monthly: 4.99,
-    yearly: 49.99,
+    id: "Comics",
+    name: "Bazinga Comics",
+    tagline: "Read every issue, every series.",
+    monthly: 7.99,
+    yearly: 79.99,
     benefits: [
-      "35% discount for all the physical copies of the comics",
-      "50% discount for the digital copies",
+      "Unlimited reading on Bazinga Comics",
+      "Every series, every issue — past and future",
+      "Offline downloads on phone and tablet",
+      "Early access drops every Wednesday",
     ],
+    accentBorder: "border-primary",
+    accentText: "text-primary",
+    accentBg: "bg-primary",
+    icon: BookOpen,
   },
   {
-    name: "Bazinga Unlimited",
-    accent: "border-red-500",
-    accentText: "text-red-500",
-    monthly: 14.99,
-    yearly: 159.99,
+    id: "TV",
+    name: "Bazinga TV",
+    tagline: "Stream the multiverse, episode by episode.",
+    monthly: 9.99,
+    yearly: 99.99,
     benefits: [
-      "50% discount for all the physical copies of the comics",
-      "Unlimited access to the digital copies",
+      "Unlimited streaming on BazingaTV",
+      "Animated series, live action and anime",
+      "4K + HDR on supported devices",
+      "Watch on TV, web, phone and tablet",
     ],
+    accentBorder: "border-orange-500",
+    accentText: "text-orange-500",
+    accentBg: "bg-orange-500",
+    icon: Tv,
+  },
+  {
+    id: "Unlimited",
+    name: "Bazinga Unlimited",
+    tagline: "Both worlds. One subscription.",
+    monthly: 14.99,
+    yearly: 149.99,
+    benefits: [
+      "Everything in Bazinga Comics",
+      "Everything in Bazinga TV",
+      "Exclusive Unlimited-only drops and previews",
+      "One account, two universes — save 23%",
+    ],
+    accentBorder: "border-transparent",
+    accentText: "text-white",
+    accentBg: "bg-gradient-to-r from-primary to-orange-500",
+    icon: Sparkles,
+    highlight: true,
   },
 ];
 
@@ -35,7 +80,7 @@ const BazingaUnlimited = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleSubscribe = (plan: string, billingCycle: "monthly" | "yearly") => {
+  const handleSubscribe = (plan: Plan["id"], billingCycle: "monthly" | "yearly") => {
     if (!user) {
       navigate("/auth");
       return;
@@ -58,52 +103,103 @@ const BazingaUnlimited = () => {
       <Header />
       <main className="container mx-auto px-4 py-16">
         <div className="max-w-4xl mx-auto text-center space-y-4">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary">Bazinga Unlimited</p>
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight">Choose your subscription</h1>
-          <p className="text-muted-foreground">
-            Unlock exclusive pricing on physical comics and expand your digital reading experience.
+          <p className="text-sm font-semibold uppercase tracking-[0.3em] bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">
+            Bazinga Subscriptions
+          </p>
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight">Choose your universe</h1>
+          <p className="text-muted-foreground max-w-2xl mx-auto">
+            Read the comics, stream the shows, or unlock everything with one Unlimited account.
           </p>
         </div>
 
-        <div className="mt-12 grid gap-8 lg:grid-cols-2">
-          {plans.map((plan) => (
-            <div key={plan.name} className={`rounded-2xl border-2 ${plan.accent} bg-card p-8 shadow-sm`}>
-              <div className="space-y-3">
-                <h2 className={`text-2xl font-bold ${plan.accentText}`}>{plan.name}</h2>
-                <p className="text-muted-foreground">
-                  ${plan.monthly.toFixed(2)} / month or ${plan.yearly.toFixed(2)} / year
+        <div className="mt-12 grid gap-8 lg:grid-cols-3">
+          {plans.map((plan) => {
+            const Icon = plan.icon;
+            return (
+              <div
+                key={plan.id}
+                className={`relative rounded-2xl border-2 ${plan.accentBorder} bg-card p-8 shadow-sm flex flex-col ${
+                  plan.highlight
+                    ? "lg:scale-[1.04] shadow-[0_0_60px_hsl(var(--shadow-glow))] ring-2 ring-transparent bg-gradient-to-b from-card via-card to-card"
+                    : ""
+                }`}
+                style={
+                  plan.highlight
+                    ? {
+                        backgroundImage:
+                          "linear-gradient(hsl(var(--card)),hsl(var(--card))), linear-gradient(to right, hsl(var(--primary)), hsl(25 95% 55%))",
+                        backgroundOrigin: "border-box",
+                        backgroundClip: "padding-box, border-box",
+                      }
+                    : undefined
+                }
+              >
+                {plan.highlight && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.3em] bg-gradient-to-r from-primary to-orange-500 text-white rounded-full px-3 py-1">
+                    Best Value
+                  </span>
+                )}
+
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`grid place-items-center h-10 w-10 rounded-lg ${plan.accentBg} ${
+                      plan.id === "TV" ? "text-black" : "text-white"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h2 className={`text-2xl font-bold ${plan.accentText}`}>{plan.name}</h2>
+                    <p className="text-xs text-muted-foreground">{plan.tagline}</p>
+                  </div>
+                </div>
+
+                <p className="mt-6 text-sm text-muted-foreground">
+                  <span className={`text-3xl font-black ${plan.accentText}`}>${plan.monthly.toFixed(2)}</span>
+                  <span className="ml-1">/ month</span>
                 </p>
-              </div>
+                <p className="text-xs text-muted-foreground">or ${plan.yearly.toFixed(2)} / year</p>
 
-              <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
-                {plan.benefits.map((benefit) => (
-                  <li key={benefit} className="flex gap-2">
-                    <span className={`mt-1 h-2 w-2 rounded-full ${plan.accentText.replace("text", "bg")}`} />
-                    <span>{benefit}</span>
-                  </li>
-                ))}
-              </ul>
+                <ul className="mt-6 space-y-3 text-sm text-foreground/85 flex-1">
+                  {plan.benefits.map((benefit) => (
+                    <li key={benefit} className="flex gap-2">
+                      <Check className={`h-4 w-4 mt-0.5 shrink-0 ${plan.accentText}`} />
+                      <span>{benefit}</span>
+                    </li>
+                  ))}
+                </ul>
 
-              <div className="mt-8 grid gap-3">
-                <Button
-                  size="lg"
-                  className={`w-full ${plan.name === "Bazinga Unlimited" ? "bg-red-600 hover:bg-red-700" : "bg-orange-500 hover:bg-orange-600"} text-white`}
-                  onClick={() => handleSubscribe(plan.name.includes("Premium") ? "Premium" : "Unlimited", "monthly")}
-                >
-                  Subscribe Monthly
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className={`w-full border-2 ${plan.accent} ${plan.accentText}`}
-                  onClick={() => handleSubscribe(plan.name.includes("Premium") ? "Premium" : "Unlimited", "yearly")}
-                >
-                  Subscribe Yearly
-                </Button>
+                <div className="mt-8 grid gap-3">
+                  <Button
+                    size="lg"
+                    className={`w-full text-white font-bold ${
+                      plan.id === "TV"
+                        ? "bg-orange-500 hover:bg-orange-600 text-black"
+                        : plan.id === "Comics"
+                          ? "bg-primary hover:bg-primary/90"
+                          : "bg-gradient-to-r from-primary to-orange-500 hover:opacity-90"
+                    }`}
+                    onClick={() => handleSubscribe(plan.id, "monthly")}
+                  >
+                    Subscribe Monthly
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className={`w-full border-2 ${plan.accentBorder} ${plan.accentText}`}
+                    onClick={() => handleSubscribe(plan.id, "yearly")}
+                  >
+                    Subscribe Yearly
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+
+        <p className="mt-10 text-center text-xs text-muted-foreground">
+          Cancel anytime. Taxes may apply.
+        </p>
       </main>
       <Footer />
     </div>

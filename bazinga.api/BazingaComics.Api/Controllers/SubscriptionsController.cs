@@ -32,12 +32,14 @@ public class SubscriptionsController : ControllerBase
 
         var type = (req.SubscriptionType ?? string.Empty).Trim();
         if (string.Equals(type, "Prem", StringComparison.OrdinalIgnoreCase)) type = "Premium";
-        if (!string.Equals(type, "Premium", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(type, "Unlimited", StringComparison.OrdinalIgnoreCase))
+
+        var allowed = new[] { "Comics", "TV", "Unlimited", "Premium" };
+        var match = allowed.FirstOrDefault(a => string.Equals(a, type, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
         {
-            return BadRequest("subscriptionType must be 'Premium' or 'Unlimited'.");
+            return BadRequest("subscriptionType must be 'Comics', 'TV' or 'Unlimited'.");
         }
-        type = char.ToUpperInvariant(type[0]) + type.Substring(1).ToLowerInvariant();
+        type = match;
 
         var cycle = (req.BillingCycle ?? string.Empty).Trim().ToLowerInvariant();
         if (cycle != "monthly" && cycle != "yearly")

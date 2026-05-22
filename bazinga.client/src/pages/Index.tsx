@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/Header";
 import HeroCarousel from "@/components/HeroCarousel";
 import ComicSection from "@/components/ComicSection";
-import UnlimitedBanner from "@/components/UnlimitedBanner";
 import Footer from "@/components/Footer";
 import BrowseByFilter from "@/components/BrowseByFilter";
 import ComicModal from "@/components/ComicModal";
@@ -195,14 +194,13 @@ const Index = () => {
               showViewAll={false}
               onComicClick={handleComicClick}
             />
-            <ComicSection 
-              id="digital-read" 
-              title="DIGITAL EXCLUSIVE" 
+            <ComicSection
+              id="digital-read"
+              title="DIGITAL EXCLUSIVE"
               comics={digitalRead}
               viewAllHref="/comics?view=digital"
               onComicClick={handleComicClick}
             />
-            <UnlimitedBanner />
             <ComicSection
               id="all-comics"
               title="ALL COMICS"

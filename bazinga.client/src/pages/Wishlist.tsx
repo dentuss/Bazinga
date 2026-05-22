@@ -1,31 +1,29 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Heart, Trash2, ShoppingCart, ArrowLeft } from "lucide-react";
+import { Heart, Trash2, BookOpen, ArrowLeft } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useWishlist } from "@/contexts/WishlistContext";
-import { useCart } from "@/contexts/CartContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { resolveImageUrl } from "@/lib/images";
+
+const hasComicsAccess = (subscriptionType?: string) => {
+  const sub = subscriptionType?.toLowerCase();
+  return sub === "comics" || sub === "unlimited" || sub === "premium";
+};
 
 const Wishlist = () => {
   const { items, removeFromWishlist } = useWishlist();
-  const { addToCart } = useCart();
-
-  const handleMoveToCart = (item: typeof items[0]) => {
-    addToCart({
-      comicId: item.id,
-      purchaseType: "ORIGINAL",
-    });
-    removeFromWishlist(item.id);
-  };
+  const { user } = useAuth();
+  const subscribed = hasComicsAccess(user?.subscriptionType);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
-      
+
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="flex items-center gap-4 mb-8">
-          <Link to="/">
+          <Link to="/comics">
             <Button variant="ghost" size="icon">
               <ArrowLeft className="h-5 w-5" />
             </Button>
@@ -41,9 +39,9 @@ const Wishlist = () => {
             <Heart className="h-24 w-24 mx-auto text-muted-foreground mb-6" />
             <h2 className="text-2xl font-bold text-foreground mb-2">Your wishlist is empty</h2>
             <p className="text-muted-foreground mb-6">
-              Save your favorite comics to buy later
+              Save comics here to read them later
             </p>
-            <Link to="/">
+            <Link to="/comics">
               <Button>BROWSE COMICS</Button>
             </Link>
           </div>
@@ -63,17 +61,25 @@ const Wishlist = () => {
                 </div>
                 <div className="p-4">
                   <h3 className="font-bold text-foreground line-clamp-2 mb-1">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground mb-2">{item.creators}</p>
-                  <p className="text-xl font-bold text-primary mb-4">${item.price.toFixed(2)}</p>
+                  <p className="text-sm text-muted-foreground mb-4">{item.creators}</p>
                   <div className="flex gap-2">
-                    <Button
-                      onClick={() => handleMoveToCart(item)}
-                      className="flex-1"
-                      size="sm"
-                    >
-                      <ShoppingCart className="h-4 w-4 mr-1" />
-                      ADD TO CART
-                    </Button>
+                    {subscribed ? (
+                      <Link to={`/read/${item.id}`} className="flex-1">
+                        <Button className="w-full" size="sm">
+                          <BookOpen className="h-4 w-4 mr-1" />
+                          READ
+                        </Button>
+                      </Link>
+                    ) : (
+                      <Link to="/bazinga-unlimited" className="flex-1">
+                        <Button
+                          size="sm"
+                          className="w-full bg-gradient-to-r from-primary via-primary to-orange-500 text-white border-0"
+                        >
+                          SUBSCRIBE
+                        </Button>
+                      </Link>
+                    )}
                     <Button
                       variant="outline"
                       size="icon"
