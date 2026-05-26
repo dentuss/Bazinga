@@ -20,6 +20,7 @@ import UnderConstruction from "./pages/UnderConstruction";
 import Landing from "./pages/Landing";
 import Choice from "./pages/Choice";
 import BazingaTV from "./pages/BazingaTV";
+import Watch from "./pages/Watch";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/" element={<RootGate />} />
               <Route path="/comics" element={<Index />} />
               <Route path="/bazinga-tv" element={<BazingaTV />} />
+              <Route path="/bazinga-tv/watch/:id" element={<Watch />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/wishlist" element={<Wishlist />} />

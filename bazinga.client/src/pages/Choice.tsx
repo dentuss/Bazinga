@@ -38,7 +38,7 @@ const Choice = () => {
         {/* COMICS HALF */}
         <Link
           to="/comics"
-          className="group/comics relative flex-1 overflow-hidden cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary transition-[flex-grow] duration-700 ease-out md:hover:flex-[1.6] md:group-hover/root:[&:not(:hover)]:flex-[0.4]"
+          className="group/comics relative flex-1 overflow-hidden cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary transition-[flex-grow] duration-700 ease-out md:hover:flex-[1.35] md:group-hover/root:[&:not(:hover)]:flex-[0.75]"
           aria-label="Enter Bazinga Comics"
         >
           {/* Background: comic cover collage */}
@@ -51,7 +51,7 @@ const Choice = () => {
           </div>
 
           {/* Dark overlay (lifted on hover) */}
-          <div className="absolute inset-0 bg-black/70 transition-opacity duration-700 group-hover/comics:bg-black/40" />
+          <div className="absolute inset-0 bg-black/70 transition-opacity duration-700 group-hover/comics:bg-black/50" />
 
           {/* Diagonal split edge accent on the right */}
           <div className="hidden md:block absolute top-0 right-0 h-full w-px bg-white/10" />
@@ -61,14 +61,14 @@ const Choice = () => {
             className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-700 group-hover/comics:opacity-100"
             style={{
               background:
-                "radial-gradient(circle at center, hsl(0 82% 55% / 0.55) 0%, hsl(0 82% 45% / 0.25) 35%, transparent 70%)",
+                "radial-gradient(circle at center, hsl(0 82% 55% / 0.28) 0%, hsl(0 82% 45% / 0.12) 40%, transparent 72%)",
             }}
           />
           {/* Outer red bloom along edges */}
           <div
             className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-700 group-hover/comics:opacity-100"
             style={{
-              boxShadow: "inset 0 0 120px 30px hsl(0 82% 55% / 0.7)",
+              boxShadow: "inset 0 0 100px 20px hsl(0 82% 55% / 0.35)",
             }}
           />
 
@@ -99,7 +99,7 @@ const Choice = () => {
         {/* TV HALF */}
         <Link
           to="/bazinga-tv"
-          className="group/tv relative flex-1 overflow-hidden cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-orange-500 transition-[flex-grow] duration-700 ease-out md:hover:flex-[1.6] md:group-hover/root:[&:not(:hover)]:flex-[0.4]"
+          className="group/tv relative flex-1 overflow-hidden cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-orange-500 transition-[flex-grow] duration-700 ease-out md:hover:flex-[1.35] md:group-hover/root:[&:not(:hover)]:flex-[0.75]"
           aria-label="Enter BazingaTV"
         >
           {/* Background: looping video with poster fallback */}
@@ -122,20 +122,20 @@ const Choice = () => {
           </div>
 
           {/* Dark overlay (lifted on hover) */}
-          <div className="absolute inset-0 bg-black/70 transition-opacity duration-700 group-hover/tv:bg-black/40" />
+          <div className="absolute inset-0 bg-black/70 transition-opacity duration-700 group-hover/tv:bg-black/50" />
 
           {/* Orange glow background light effect */}
           <div
             className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-700 group-hover/tv:opacity-100"
             style={{
               background:
-                "radial-gradient(circle at center, hsl(25 95% 55% / 0.55) 0%, hsl(25 95% 45% / 0.25) 35%, transparent 70%)",
+                "radial-gradient(circle at center, hsl(25 95% 55% / 0.28) 0%, hsl(25 95% 45% / 0.12) 40%, transparent 72%)",
             }}
           />
           <div
             className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-700 group-hover/tv:opacity-100"
             style={{
-              boxShadow: "inset 0 0 120px 30px hsl(25 95% 55% / 0.7)",
+              boxShadow: "inset 0 0 100px 20px hsl(25 95% 55% / 0.35)",
             }}
           />
 
