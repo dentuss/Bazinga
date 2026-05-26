@@ -6,13 +6,13 @@ import {
   ChevronRight,
   ChevronLeft,
   ChevronDown,
-  Info,
   X,
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SiteHeader, { type SiteHeaderNavItem } from "@/components/SiteHeader";
+import TVHero from "@/components/TVHero";
 import heroBanner1 from "@/assets/hero-banner-1.jpg";
 import heroBanner2 from "@/assets/hero-banner-2.jpg";
 import heroBanner3 from "@/assets/hero-banner-3.jpg";
@@ -78,15 +78,6 @@ const buildShow = (
     "A legendary tale from the Bazinga multiverse — heroes rise, empires fall, and the cosmos shifts forever.",
   ...meta,
 });
-
-const heroFeatured = {
-  title: "HEROES OF BAZINGA",
-  tagline: "The series that started a universe.",
-  description:
-    "When the cosmos cracks, only an unlikely team of misfits stands between order and oblivion. The flagship Bazinga series returns with a new season.",
-  background: heroBanner1,
-  badges: ["NEW SEASON", "TOP 10 TODAY"],
-};
 
 const continueWatching: ContinueWatching[] = [
   { id: "cw1", title: "Heroes of Bazinga", episode: "S2:E4 The Edge of Forever", backdrop: heroBanner1, progress: 64, newEpisodes: true },
@@ -497,68 +488,8 @@ const BazingaTV = () => {
         avatarAccent="orange"
       />
 
-      {/* Hero */}
-      <section className="relative h-[80vh] min-h-[520px] -mt-16">
-        <div className="absolute inset-0">
-          <img src={heroFeatured.background} alt="" className="h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background via-background/70 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(ellipse at 30% 50%, hsl(25 95% 55% / 0.18), transparent 60%)",
-            }}
-          />
-        </div>
-
-        <div className="relative z-10 container mx-auto h-full px-4 md:px-8 flex items-end pb-16 md:pb-24">
-          <div className="max-w-2xl space-y-5">
-            <div className="flex flex-wrap gap-2">
-              {heroFeatured.badges.map((b) => (
-                <span
-                  key={b}
-                  className="text-[10px] md:text-xs font-bold uppercase tracking-[0.3em] bg-orange-500/15 text-orange-400 border border-orange-500/30 rounded-full px-3 py-1"
-                >
-                  {b}
-                </span>
-              ))}
-            </div>
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-black tracking-tighter leading-[0.95]">
-              {heroFeatured.title}
-            </h1>
-            <p className="text-lg md:text-xl text-foreground/85 max-w-xl">{heroFeatured.tagline}</p>
-            <p className="text-sm md:text-base text-muted-foreground max-w-2xl">
-              {heroFeatured.description}
-            </p>
-            <div className="flex flex-wrap gap-3 pt-2">
-              <Button
-                size="lg"
-                className="bg-white text-black hover:bg-white/90 font-bold"
-                onClick={() =>
-                  setSelectedShow(
-                    buildShow("hero", heroFeatured.title, 0, { description: heroFeatured.description })
-                  )
-                }
-              >
-                <Play className="h-5 w-5 fill-current" /> Play
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-white/30 text-white hover:bg-white/10"
-                onClick={() =>
-                  setSelectedShow(
-                    buildShow("hero", heroFeatured.title, 0, { description: heroFeatured.description })
-                  )
-                }
-              >
-                <Info className="h-5 w-5" /> More Info
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* Hero trailer carousel */}
+      <TVHero />
 
       {/* Rows */}
       <main className="relative z-10 pt-4 md:pt-8 space-y-2 pb-20">
