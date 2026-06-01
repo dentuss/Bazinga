@@ -1,79 +1,53 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Mail, Lock, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
-  const [isSignUp, setIsSignUp] = useState(searchParams.get("mode") === "signup");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [error, setError] = useState("");
-  const { login, register } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    document.title = "Sign in · Bazinga";
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const action = isSignUp
-      ? register(name || email.split("@")[0], email, password)
-      : login(email, password);
-
-    action
+    setError("");
+    login(email, password)
       .then(() => navigate("/profiles"))
       .catch(() => setError("Authentication failed. Please check your details."));
   };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
       <header className="border-b border-border py-4">
         <div className="container mx-auto px-4">
-          <Link to="/" className="text-2xl font-black tracking-tighter text-primary hover:text-primary/90 transition-colors">
+          <Link
+            to="/"
+            className="text-2xl font-black tracking-tighter text-primary hover:text-primary/90 transition-colors"
+          >
             BAZINGA
           </Link>
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="flex-1 flex items-center justify-center py-12 px-4">
         <div className="w-full max-w-md">
           <div className="bg-card border border-border rounded-lg p-8 shadow-xl">
             <div className="text-center mb-8">
-              <h1 className="text-3xl font-black text-foreground mb-2">
-                {isSignUp ? "CREATE ACCOUNT" : "WELCOME BACK"}
-              </h1>
-              <p className="text-muted-foreground">
-                {isSignUp
-                  ? "Join the Bazinga Comics universe"
-                  : "Sign in to continue your adventure"}
-              </p>
+              <h1 className="text-3xl font-black text-foreground mb-2">WELCOME BACK</h1>
+              <p className="text-muted-foreground">Sign in to continue your adventure</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {isSignUp && (
-                <div className="space-y-2">
-                  <Label htmlFor="name" className="text-foreground font-semibold">
-                    FULL NAME
-                  </Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <Input
-                      id="name"
-                      type="text"
-                      placeholder="Enter your name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="pl-10 bg-background border-border"
-                    />
-                  </div>
-                </div>
-              )}
-
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-foreground font-semibold">
                   EMAIL ADDRESS
@@ -87,6 +61,7 @@ const Auth = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10 bg-background border-border"
+                    autoComplete="email"
                   />
                 </div>
               </div>
@@ -104,26 +79,23 @@ const Auth = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 bg-background border-border"
+                    autoComplete="current-password"
                   />
                 </div>
               </div>
 
               <Button type="submit" className="w-full" size="lg">
-                {isSignUp ? "CREATE ACCOUNT" : "SIGN IN"}
+                SIGN IN
               </Button>
               {error && <p className="text-sm text-red-500 text-center">{error}</p>}
             </form>
 
             <div className="mt-6 text-center">
               <p className="text-muted-foreground">
-                {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-                <button
-                  type="button"
-                  onClick={() => setIsSignUp(!isSignUp)}
-                  className="text-primary font-semibold hover:underline"
-                >
-                  {isSignUp ? "Sign In" : "Sign Up"}
-                </button>
+                Don't have an account?{" "}
+                <Link to="/" className="text-primary font-semibold hover:underline">
+                  Get started
+                </Link>
               </p>
             </div>
 

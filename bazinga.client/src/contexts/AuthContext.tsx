@@ -8,6 +8,7 @@ import {
   listProfiles as apiListProfiles,
   updateProfile as apiUpdateProfile,
 } from "@/lib/profiles";
+import type { SignupPlan } from "@/lib/signup";
 
 type AuthUser = {
   id: number;
@@ -48,6 +49,7 @@ type AuthContextType = {
   profilesLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
+  completeSignup: (token: string, password: string, plan: SignupPlan) => Promise<void>;
   updateUser: (updates: Partial<AuthUser>) => void;
   logout: () => void;
   refreshProfiles: () => Promise<void>;
@@ -158,6 +160,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     handleAuth(response.token, response);
   };
 
+  const completeSignup = async (token: string, password: string, plan: SignupPlan) => {
+    const response = await apiFetch<AuthApiResponse>("/api/auth/signup/complete", {
+      method: "POST",
+      body: JSON.stringify({ token, password, plan }),
+    });
+    handleAuth(response.token, response);
+  };
+
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -199,6 +209,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         profilesLoading,
         login,
         register,
+        completeSignup,
         updateUser: (updates) => setUser((prev) => (prev ? { ...prev, ...updates } : prev)),
         logout,
         refreshProfiles,

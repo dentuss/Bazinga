@@ -1,8 +1,10 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { ChevronDown, Play, Bookmark, Smartphone, Download } from "lucide-react";
+import { useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { ChevronDown, Loader2, Play, Bookmark, Smartphone, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { checkSignupEmail } from "@/lib/signup";
 import heroBanner from "@/assets/hero-banner-1.jpg";
 import comic1 from "@/assets/comic-1.jpg";
 import comic2 from "@/assets/comic-2.jpg";
@@ -68,6 +70,36 @@ const faqs = [
 
 const Landing = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const heroFormRef = useRef<HTMLFormElement | null>(null);
+
+  const handleSignupStart = async (email: string) => {
+    const trimmed = email.trim();
+    if (!trimmed) return;
+    setCheckingEmail(true);
+    try {
+      const { available } = await checkSignupEmail(trimmed);
+      if (available) {
+        navigate(`/signup/review?email=${encodeURIComponent(trimmed)}`);
+      } else {
+        toast({
+          title: "You already have a Bazinga account",
+          description: "We'll take you to sign in.",
+        });
+        navigate(`/auth?mode=signin&email=${encodeURIComponent(trimmed)}`);
+      }
+    } catch (err) {
+      toast({
+        title: "Could not check that email",
+        description: err instanceof Error ? err.message : "Try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -107,12 +139,12 @@ const Landing = () => {
             Ready to dive in? Create an account or sign in to get started.
           </p>
           <form
+            ref={heroFormRef}
             className="mt-8 flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto justify-center"
             onSubmit={(e) => {
               e.preventDefault();
               const data = new FormData(e.currentTarget);
-              const email = String(data.get("email") || "");
-              window.location.href = `/auth?mode=signup${email ? `&email=${encodeURIComponent(email)}` : ""}`;
+              void handleSignupStart(String(data.get("email") || ""));
             }}
           >
             <Input
@@ -121,9 +153,23 @@ const Landing = () => {
               required
               placeholder="Email address"
               className="h-14 text-base bg-background/70 border-border/80 backdrop-blur"
+              disabled={checkingEmail}
             />
-            <Button type="submit" variant="hero" size="lg" className="h-14 px-8 text-base">
-              Get Started
+            <Button
+              type="submit"
+              variant="hero"
+              size="lg"
+              className="h-14 px-8 text-base"
+              disabled={checkingEmail}
+            >
+              {checkingEmail ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Checking…
+                </>
+              ) : (
+                "Get Started"
+              )}
             </Button>
           </form>
         </div>
@@ -209,11 +255,18 @@ const Landing = () => {
 
           <div className="mt-12 text-center">
             <p className="text-lg text-muted-foreground mb-4">Ready to join the Bazinga universe?</p>
-            <Link to="/auth?mode=signup">
-              <Button variant="hero" size="lg" className="h-14 px-10 text-base">
-                Get Started
-              </Button>
-            </Link>
+            <Button
+              variant="hero"
+              size="lg"
+              className="h-14 px-10 text-base"
+              onClick={() => {
+                heroFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                const input = heroFormRef.current?.querySelector<HTMLInputElement>("input[name=email]");
+                input?.focus();
+              }}
+            >
+              Get Started
+            </Button>
           </div>
         </div>
       </section>

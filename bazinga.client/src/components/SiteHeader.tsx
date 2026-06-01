@@ -423,9 +423,9 @@ const SiteHeader = ({
                     <Link to="/auth?mode=signin" onClick={() => setMobileOpen(false)}>
                       <Button className="w-full">Sign In</Button>
                     </Link>
-                    <Link to="/auth?mode=signup" onClick={() => setMobileOpen(false)}>
+                    <Link to="/" onClick={() => setMobileOpen(false)}>
                       <Button variant="outline" className="w-full">
-                        Register
+                        Get Started
                       </Button>
                     </Link>
                   </>

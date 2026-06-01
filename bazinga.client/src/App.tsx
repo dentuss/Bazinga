@@ -25,6 +25,9 @@ import Watch from "./pages/Watch";
 import ProfileSelector from "./pages/ProfileSelector";
 import ManageProfiles from "./pages/ManageProfiles";
 import ProfileEditor from "./pages/ProfileEditor";
+import SignUpReview from "./pages/SignUpReview";
+import SignUpCheckEmail from "./pages/SignUpCheckEmail";
+import SignUpComplete from "./pages/SignUpComplete";
 
 const queryClient = new QueryClient();
 
@@ -60,6 +63,10 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<RootGate />} />
                 <Route path="/auth" element={<Auth />} />
+
+                <Route path="/signup/review" element={<SignUpReview />} />
+                <Route path="/signup/check-email" element={<SignUpCheckEmail />} />
+                <Route path="/signup/complete" element={<SignUpComplete />} />
 
                 <Route
                   path="/profiles"
