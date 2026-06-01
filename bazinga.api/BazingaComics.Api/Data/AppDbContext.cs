@@ -8,6 +8,7 @@ public class AppDbContext : DbContext
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     public DbSet<User> Users => Set<User>();
+    public DbSet<Entities.Profile> Profiles => Set<Entities.Profile>();
     public DbSet<Comic> Comics => Set<Comic>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<ComicCondition> Conditions => Set<ComicCondition>();
@@ -42,6 +43,23 @@ public class AppDbContext : DbContext
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.HasIndex(x => x.Username).IsUnique();
             e.HasIndex(x => x.Email).IsUnique();
+        });
+
+        b.Entity<Entities.Profile>(e =>
+        {
+            e.ToTable("profiles");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.UserId).HasColumnName("user_id").IsRequired();
+            e.Property(x => x.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+            e.Property(x => x.AvatarUrl).HasColumnName("avatar_url").HasMaxLength(500);
+            e.Property(x => x.AvatarColor).HasColumnName("avatar_color").HasMaxLength(20).IsRequired();
+            e.Property(x => x.AvatarIcon).HasColumnName("avatar_icon").HasMaxLength(20);
+            e.Property(x => x.IsRoot).HasColumnName("is_root").HasDefaultValue(false);
+            e.Property(x => x.IsKids).HasColumnName("is_kids").HasDefaultValue(false);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasIndex(x => x.UserId);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Category>(e =>

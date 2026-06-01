@@ -1,9 +1,35 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Menu, Search, Sparkles, User, X } from "lucide-react";
+import {
+  Check,
+  HelpCircle,
+  LogOut,
+  Menu,
+  Moon,
+  Pencil,
+  Plus,
+  Search,
+  Settings,
+  Sparkles,
+  Sun,
+  User,
+  Users,
+  X,
+} from "lucide-react";
+import { useTheme } from "next-themes";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import ProfileAvatar from "@/components/ProfileAvatar";
 import { useAuth } from "@/contexts/AuthContext";
+import { MAX_PROFILES_PER_ACCOUNT } from "@/lib/profiles";
 
 export type HeaderTone = "default" | "red" | "orange";
 
@@ -40,8 +66,9 @@ const SiteHeader = ({
   homeLink = "/",
   avatarAccent = "red",
 }: SiteHeaderProps) => {
-  const { user } = useAuth();
+  const { user, profiles, currentProfile, selectProfile, logout } = useAuth();
   const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const accentClass =
@@ -50,6 +77,23 @@ const SiteHeader = ({
     avatarAccent === "orange"
       ? "border-orange-500/40 ring-orange-500/30"
       : "border-primary/20 ring-primary/10";
+
+  const canManage = !currentProfile || currentProfile.isRoot;
+  const canAdd = canManage && profiles.length < MAX_PROFILES_PER_ACCOUNT;
+  const isDark = theme === "dark";
+  const otherProfiles = profiles.filter((p) => p.id !== currentProfile?.id);
+
+  const handleSwitchProfile = (id: number) => {
+    selectProfile(id);
+    navigate("/");
+  };
+
+  const handleSignOut = () => {
+    logout();
+    navigate("/");
+  };
+
+  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
   const renderBrand = () => {
     if (brand.layout === "inline") {
@@ -101,6 +145,27 @@ const SiteHeader = ({
     );
   };
 
+  const renderAvatar = () => {
+    if (currentProfile) {
+      return (
+        <ProfileAvatar
+          profile={currentProfile}
+          size="sm"
+          rounded="md"
+          className={`ring-1 ${avatarBorder} border`}
+        />
+      );
+    }
+    return (
+      <Avatar className={`h-9 w-9 border ring-1 ${avatarBorder}`}>
+        {user?.avatarUrl ? <AvatarImage src={user.avatarUrl} alt={`${user.username} profile`} /> : null}
+        <AvatarFallback className="bg-muted text-muted-foreground">
+          <User className="h-4 w-4" />
+        </AvatarFallback>
+      </Avatar>
+    );
+  };
+
   return (
     <header className="sticky top-0 z-50 bg-gradient-to-b from-background via-background/85 to-transparent backdrop-blur-sm">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-8">
@@ -121,17 +186,136 @@ const SiteHeader = ({
               Join Now
             </Button>
           </Link>
+
           {user ? (
-            <Link to="/profile" aria-label="View profile">
-              <Avatar className={`h-9 w-9 border ring-1 ${avatarBorder}`}>
-                {user.avatarUrl ? (
-                  <AvatarImage src={user.avatarUrl} alt={`${user.username} profile`} />
-                ) : null}
-                <AvatarFallback className="bg-muted text-muted-foreground">
-                  <User className="h-4 w-4" />
-                </AvatarFallback>
-              </Avatar>
-            </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                aria-label="Account and profiles menu"
+              >
+                {renderAvatar()}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                sideOffset={8}
+                className="w-72 p-2 border-border/70 shadow-xl"
+              >
+                <DropdownMenuLabel className="flex items-center gap-3 px-2 py-2">
+                  {currentProfile ? (
+                    <ProfileAvatar profile={currentProfile} size="sm" rounded="md" />
+                  ) : (
+                    <div className="h-9 w-9 rounded-md bg-muted grid place-items-center">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate">
+                      {currentProfile?.name ?? user.username}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground truncate">{user.email}</p>
+                  </div>
+                </DropdownMenuLabel>
+
+                {otherProfiles.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <div className="px-1 py-1 max-h-64 overflow-y-auto">
+                      {otherProfiles.map((profile) => (
+                        <DropdownMenuItem
+                          key={profile.id}
+                          onSelect={() => handleSwitchProfile(profile.id)}
+                          className="gap-3 cursor-pointer py-2"
+                        >
+                          <ProfileAvatar profile={profile} size="sm" rounded="md" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate">{profile.name}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {profile.isRoot ? "Main profile" : profile.isKids ? "Kids" : "Sub-profile"}
+                            </p>
+                          </div>
+                          {profile.id === currentProfile?.id && (
+                            <Check className="h-4 w-4 text-primary" />
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {canAdd && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={() => navigate("/profiles/new")}
+                      className="gap-3 cursor-pointer"
+                    >
+                      <div className="h-9 w-9 rounded-md border border-dashed border-muted-foreground/60 grid place-items-center text-muted-foreground">
+                        <Plus className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm font-semibold">Add Profile</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
+
+                <DropdownMenuSeparator />
+                {canManage && (
+                  <DropdownMenuItem
+                    onSelect={() => navigate("/profiles/manage")}
+                    className="gap-3 cursor-pointer"
+                  >
+                    <Pencil className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">Manage Profiles</span>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  onSelect={() => navigate("/profiles")}
+                  className="gap-3 cursor-pointer"
+                >
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Switch Profile</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => navigate("/profile")}
+                  className="gap-3 cursor-pointer"
+                >
+                  <Settings className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Account</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    toggleTheme();
+                  }}
+                  className="gap-3 cursor-pointer"
+                >
+                  {isDark ? (
+                    <Moon className="h-4 w-4 text-orange-400" />
+                  ) : (
+                    <Sun className="h-4 w-4 text-orange-500" />
+                  )}
+                  <span className="text-sm flex-1">Theme</span>
+                  <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                    {isDark ? "Dark" : "Light"}
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => navigate("/under-construction")}
+                  className="gap-3 cursor-pointer"
+                >
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Help center</span>
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={handleSignOut}
+                  className="gap-3 cursor-pointer text-destructive focus:text-destructive"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="text-sm">Sign out of Bazinga</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             <Link to="/auth">
               <Button variant="ghost" className="hidden md:flex font-semibold">
@@ -139,6 +323,7 @@ const SiteHeader = ({
               </Button>
             </Link>
           )}
+
           <Button
             variant="ghost"
             size="icon"
@@ -186,7 +371,54 @@ const SiteHeader = ({
                   <Sparkles className="h-4 w-4" />
                   Join Now
                 </Button>
-                {!user ? (
+                {user ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2"
+                      onClick={() => {
+                        setMobileOpen(false);
+                        navigate("/profiles");
+                      }}
+                    >
+                      <Users className="h-4 w-4" />
+                      Switch Profile
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2"
+                      onClick={() => {
+                        setMobileOpen(false);
+                        navigate("/profile");
+                      }}
+                    >
+                      <Settings className="h-4 w-4" />
+                      Account
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="w-full gap-2"
+                      onClick={() => {
+                        setMobileOpen(false);
+                        toggleTheme();
+                      }}
+                    >
+                      {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                      {isDark ? "Switch to light mode" : "Switch to dark mode"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="w-full gap-2 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        setMobileOpen(false);
+                        handleSignOut();
+                      }}
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sign out
+                    </Button>
+                  </>
+                ) : (
                   <>
                     <Link to="/auth?mode=signin" onClick={() => setMobileOpen(false)}>
                       <Button className="w-full">Sign In</Button>
@@ -197,12 +429,6 @@ const SiteHeader = ({
                       </Button>
                     </Link>
                   </>
-                ) : (
-                  <Link to="/profile" onClick={() => setMobileOpen(false)}>
-                    <Button variant="outline" className="w-full">
-                      Profile
-                    </Button>
-                  </Link>
                 )}
               </div>
             </nav>

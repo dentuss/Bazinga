@@ -115,6 +115,24 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+
+    // Older databases were created before the profiles table existed; add it
+    // idempotently so deployments do not need to wipe their data.
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS profiles (
+            id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            avatar_url VARCHAR(500) NULL,
+            avatar_color VARCHAR(20) NOT NULL DEFAULT '#E50914',
+            avatar_icon VARCHAR(20) NULL,
+            is_root TINYINT(1) NOT NULL DEFAULT 0,
+            is_kids TINYINT(1) NOT NULL DEFAULT 0,
+            created_at DATETIME(6) NOT NULL,
+            updated_at DATETIME(6) NOT NULL,
+            INDEX ix_profiles_user_id (user_id),
+            CONSTRAINT fk_profiles_users FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );");
 }
 
 if (app.Environment.IsDevelopment())
