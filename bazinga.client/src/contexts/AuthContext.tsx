@@ -1,5 +1,13 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import {
+  type Profile,
+  type ProfileUpsertRequest,
+  createProfile as apiCreateProfile,
+  deleteProfile as apiDeleteProfile,
+  listProfiles as apiListProfiles,
+  updateProfile as apiUpdateProfile,
+} from "@/lib/profiles";
 
 type AuthUser = {
   id: number;
@@ -16,41 +24,104 @@ type AuthUser = {
   updatedAt?: string;
 };
 
+type AuthApiResponse = {
+  token: string;
+  userId: number;
+  username: string;
+  email: string;
+  role?: string;
+  avatarUrl?: string;
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string;
+  subscriptionType?: string;
+  subscriptionExpiration?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 type AuthContextType = {
   user: AuthUser | null;
   token: string | null;
+  profiles: Profile[];
+  currentProfile: Profile | null;
+  profilesLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   updateUser: (updates: Partial<AuthUser>) => void;
   logout: () => void;
+  refreshProfiles: () => Promise<void>;
+  selectProfile: (id: number) => void;
+  clearProfile: () => void;
+  createProfile: (body: ProfileUpsertRequest) => Promise<Profile>;
+  saveProfile: (id: number, body: ProfileUpsertRequest) => Promise<Profile>;
+  removeProfile: (id: number) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const CURRENT_PROFILE_KEY = "current_profile_id";
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("auth_token"));
-  const [user, setUser] = useState<AuthContextType["user"]>(() => {
+  const [user, setUser] = useState<AuthUser | null>(() => {
     const saved = localStorage.getItem("auth_user");
     return saved ? JSON.parse(saved) : null;
   });
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(false);
+  const [currentProfileId, setCurrentProfileId] = useState<number | null>(() => {
+    const raw = sessionStorage.getItem(CURRENT_PROFILE_KEY);
+    return raw ? Number(raw) : null;
+  });
 
   useEffect(() => {
-    if (token) {
-      localStorage.setItem("auth_token", token);
+    if (token) localStorage.setItem("auth_token", token);
+    else localStorage.removeItem("auth_token");
+  }, [token]);
+
+  useEffect(() => {
+    if (user) localStorage.setItem("auth_user", JSON.stringify(user));
+    else localStorage.removeItem("auth_user");
+  }, [user]);
+
+  useEffect(() => {
+    if (currentProfileId !== null) {
+      sessionStorage.setItem(CURRENT_PROFILE_KEY, String(currentProfileId));
     } else {
-      localStorage.removeItem("auth_token");
+      sessionStorage.removeItem(CURRENT_PROFILE_KEY);
+    }
+  }, [currentProfileId]);
+
+  const refreshProfiles = useCallback(async () => {
+    if (!token) {
+      setProfiles([]);
+      return;
+    }
+    setProfilesLoading(true);
+    try {
+      const list = await apiListProfiles(token);
+      setProfiles(list);
+    } finally {
+      setProfilesLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
-    if (user) {
-      localStorage.setItem("auth_user", JSON.stringify(user));
+    if (token) {
+      void refreshProfiles();
     } else {
-      localStorage.removeItem("auth_user");
+      setProfiles([]);
+      setCurrentProfileId(null);
     }
-  }, [user]);
+  }, [token, refreshProfiles]);
 
-  const handleAuth = (tokenValue: string, payload: any) => {
+  const currentProfile = useMemo(
+    () => profiles.find((p) => p.id === currentProfileId) ?? null,
+    [profiles, currentProfileId]
+  );
+
+  const handleAuth = (tokenValue: string, payload: AuthApiResponse) => {
     const now = new Date().toISOString();
     setToken(tokenValue);
     setUser({
@@ -67,10 +138,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       createdAt: payload.createdAt ?? now,
       updatedAt: payload.updatedAt ?? now,
     });
+    // Force the "Who's watching?" prompt on a fresh sign-in.
+    setCurrentProfileId(null);
   };
 
   const login = async (email: string, password: string) => {
-    const response = await apiFetch<any>("/api/auth/login", {
+    const response = await apiFetch<AuthApiResponse>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
@@ -78,7 +151,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const register = async (username: string, email: string, password: string) => {
-    const response = await apiFetch<any>("/api/auth/register", {
+    const response = await apiFetch<AuthApiResponse>("/api/auth/register", {
       method: "POST",
       body: JSON.stringify({ username, email, password }),
     });
@@ -88,6 +161,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = () => {
     setToken(null);
     setUser(null);
+    setProfiles([]);
+    setCurrentProfileId(null);
+  };
+
+  const selectProfile = (id: number) => setCurrentProfileId(id);
+  const clearProfile = () => setCurrentProfileId(null);
+
+  const createProfile = async (body: ProfileUpsertRequest) => {
+    if (!token) throw new Error("Not authenticated");
+    const created = await apiCreateProfile(token, body);
+    setProfiles((prev) => [...prev, created]);
+    return created;
+  };
+
+  const saveProfile = async (id: number, body: ProfileUpsertRequest) => {
+    if (!token) throw new Error("Not authenticated");
+    const updated = await apiUpdateProfile(token, id, body);
+    setProfiles((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    return updated;
+  };
+
+  const removeProfile = async (id: number) => {
+    if (!token) throw new Error("Not authenticated");
+    await apiDeleteProfile(token, id);
+    setProfiles((prev) => prev.filter((p) => p.id !== id));
+    if (currentProfileId === id) setCurrentProfileId(null);
   };
 
   return (
@@ -95,10 +194,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       value={{
         user,
         token,
+        profiles,
+        currentProfile,
+        profilesLoading,
         login,
         register,
         updateUser: (updates) => setUser((prev) => (prev ? { ...prev, ...updates } : prev)),
         logout,
+        refreshProfiles,
+        selectProfile,
+        clearProfile,
+        createProfile,
+        saveProfile,
+        removeProfile,
       }}
     >
       {children}

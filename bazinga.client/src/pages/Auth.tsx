@@ -24,7 +24,7 @@ const Auth = () => {
       : login(email, password);
 
     action
-      .then(() => navigate("/"))
+      .then(() => navigate("/profiles"))
       .catch(() => setError("Authentication failed. Please check your details."));
   };
 
