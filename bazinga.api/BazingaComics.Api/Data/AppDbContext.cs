@@ -9,6 +9,7 @@ public class AppDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
     public DbSet<Entities.Profile> Profiles => Set<Entities.Profile>();
+    public DbSet<SignupToken> SignupTokens => Set<SignupToken>();
     public DbSet<Comic> Comics => Set<Comic>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<ComicCondition> Conditions => Set<ComicCondition>();
@@ -43,6 +44,20 @@ public class AppDbContext : DbContext
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.HasIndex(x => x.Username).IsUnique();
             e.HasIndex(x => x.Email).IsUnique();
+        });
+
+        b.Entity<SignupToken>(e =>
+        {
+            e.ToTable("signup_tokens");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Email).HasColumnName("email").HasMaxLength(255).IsRequired();
+            e.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(128).IsRequired();
+            e.Property(x => x.ExpiresAt).HasColumnName("expires_at").IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.ConsumedAt).HasColumnName("consumed_at");
+            e.Property(x => x.OptOutMarketing).HasColumnName("opt_out_marketing").HasDefaultValue(false);
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasIndex(x => x.Email);
         });
 
         b.Entity<Entities.Profile>(e =>
