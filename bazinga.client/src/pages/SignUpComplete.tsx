@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { CheckCircle2, CreditCard, Loader2, Lock, Sparkles, XCircle } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  CreditCard,
+  Loader2,
+  Lock,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +25,61 @@ import comic5 from "@/assets/comic-5.jpg";
 
 const trendingCovers = [comic1, comic2, comic3, comic4, comic5];
 
+type PlanOption = {
+  id: SignupPlan;
+  name: string;
+  tagline: string;
+  monthly: number;
+  benefits: string[];
+  icon: typeof BookOpen;
+  badge?: string;
+  highlight?: boolean;
+};
+
+const planOptions: PlanOption[] = [
+  {
+    id: "free",
+    name: "Free",
+    tagline: "Sample the universe.",
+    monthly: 0,
+    icon: BookOpen,
+    benefits: [
+      "Browse the full Bazinga catalog",
+      "Read sample issues every week",
+      "No card required, no commitment",
+    ],
+  },
+  {
+    id: "premium",
+    name: "Premium",
+    tagline: "Read everything, save on the rest.",
+    monthly: 4.99,
+    icon: Sparkles,
+    badge: "Most popular",
+    highlight: true,
+    benefits: [
+      "Unlimited reading on Bazinga Comics",
+      "25% off every physical and digital comic",
+      "Offline downloads on phone and tablet",
+    ],
+  },
+  {
+    id: "unlimited",
+    name: "Unlimited",
+    tagline: "Both worlds, one subscription.",
+    monthly: 14.99,
+    icon: Sparkles,
+    badge: "Best value",
+    benefits: [
+      "Everything in Premium",
+      "Unlimited BazingaTV streaming in 4K HDR",
+      "Exclusive Unlimited-only drops and previews",
+    ],
+  },
+];
+
+const planRequiresCard = (plan: SignupPlan) => plan !== "free";
+
 const SignUpComplete = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -28,7 +91,7 @@ const SignUpComplete = () => {
   const [email, setEmail] = useState<string | null>(null);
   const [invalidReason, setInvalidReason] = useState<SignupVerifyReason | null>(null);
 
-  const [plan, setPlan] = useState<SignupPlan>("subscribe");
+  const [plan, setPlan] = useState<SignupPlan>("premium");
   const [password, setPassword] = useState("");
   const [cardName, setCardName] = useState("");
   const [cardNumber, setCardNumber] = useState("");
@@ -87,6 +150,9 @@ const SignUpComplete = () => {
     }
   }, [invalidReason]);
 
+  const selectedPlan = planOptions.find((p) => p.id === plan) ?? planOptions[1];
+  const cardRequired = planRequiresCard(plan);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 6) {
@@ -97,19 +163,27 @@ const SignUpComplete = () => {
       });
       return;
     }
-    if (!cardName.trim() || cardNumber.replace(/\s/g, "").length < 12 || !cardExpiry || cardCvc.length < 3) {
-      toast({
-        title: "Card details required",
-        description: "Both subscribe and free trial need a card on file.",
-        variant: "destructive",
-      });
-      return;
+    if (cardRequired) {
+      const digits = cardNumber.replace(/\s/g, "");
+      if (!cardName.trim() || digits.length < 12 || !cardExpiry || cardCvc.length < 3) {
+        toast({
+          title: "Card details required",
+          description: "Paid plans need a card on file.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
     setSubmitting(true);
     try {
       await completeSignup(token, password, plan);
       toast({
-        title: plan === "subscribe" ? "Welcome to Bazinga" : "Your 3-day free trial has started",
+        title:
+          plan === "free"
+            ? "Welcome to Bazinga"
+            : plan === "unlimited"
+              ? "Bazinga Unlimited unlocked"
+              : "Bazinga Premium activated",
         description: "Pick a profile to get going.",
       });
       navigate("/profiles", { replace: true });
@@ -193,10 +267,10 @@ const SignUpComplete = () => {
             You're almost in
           </p>
           <h1 className="mt-3 text-3xl md:text-5xl lg:text-6xl font-black tracking-tight max-w-3xl mx-auto leading-tight">
-            Unlimited comics, series and more.
+            Pick the plan that fits.
           </h1>
           <p className="mt-3 text-sm md:text-base text-muted-foreground">
-            Starts at €4.99/month. Cancel anytime.
+            Start free, upgrade anytime. Paid plans renew monthly — cancel from your account.
           </p>
         </div>
 
@@ -217,161 +291,186 @@ const SignUpComplete = () => {
 
       {/* Form */}
       <main className="container mx-auto px-4 md:px-8 py-12 md:py-16">
-        <form
-          onSubmit={handleSubmit}
-          className="max-w-3xl mx-auto grid gap-8 lg:grid-cols-[1.1fr_1fr]"
-        >
-          {/* Plan choice */}
-          <section className="space-y-4">
-            <div>
+        <form onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-10">
+          {/* Plan grid */}
+          <section>
+            <div className="text-center mb-6">
               <h2 className="text-xl md:text-2xl font-black tracking-tight">Choose your plan</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Both options need a card on file. Cancel anytime in your account settings.
+                You can change plans anytime from your account.
               </p>
             </div>
 
-            <PlanCard
-              selected={plan === "subscribe"}
-              onSelect={() => setPlan("subscribe")}
-              accent="red"
-              recommended
-              icon={<Sparkles className="h-5 w-5" />}
-              title="Subscribe now"
-              price="€4.99/month"
-              description="Charged today. Full access immediately — comics, BazingaTV and downloads."
-            />
-
-            <PlanCard
-              selected={plan === "trial"}
-              onSelect={() => setPlan("trial")}
-              icon={<CheckCircle2 className="h-5 w-5" />}
-              title="Start a 3-day free trial"
-              price="Free for 3 days, then €4.99/month"
-              description="No charge for the first 3 days. We'll bill your card when the trial ends — cancel before then to avoid it."
-            />
+            <div className="grid gap-4 md:grid-cols-3">
+              {planOptions.map((option) => (
+                <PlanCard
+                  key={option.id}
+                  option={option}
+                  selected={plan === option.id}
+                  onSelect={() => setPlan(option.id)}
+                />
+              ))}
+            </div>
           </section>
 
           {/* Password + card */}
-          <section className="space-y-5">
-            <div>
-              <h2 className="text-xl md:text-2xl font-black tracking-tight">Set up your account</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                One last thing — set a password and link your card.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="signup-password">Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="signup-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                  className="pl-9"
-                  required
-                  minLength={6}
-                />
+          <section className="grid gap-6 lg:grid-cols-2 max-w-3xl mx-auto">
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-xl md:text-2xl font-black tracking-tight">Set up your account</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Set a password so you can sign back in later.
+                </p>
               </div>
-            </div>
 
-            <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <CreditCard className="h-4 w-4 text-primary" />
-                Payment method
-              </div>
-              <div className="space-y-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="card-name">Name on card</Label>
+              <div className="space-y-2">
+                <Label htmlFor="signup-password">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="card-name"
-                    value={cardName}
-                    onChange={(e) => setCardName(e.target.value)}
-                    placeholder="Roman Bazinga"
-                    autoComplete="cc-name"
+                    id="signup-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 6 characters"
+                    className="pl-9"
+                    autoComplete="new-password"
                     required
+                    minLength={6}
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="card-number">Card number</Label>
-                  <Input
-                    id="card-number"
-                    value={cardNumber}
-                    onChange={(e) => {
-                      const digits = e.target.value.replace(/\D/g, "").slice(0, 16);
-                      const groups = digits.match(/.{1,4}/g);
-                      setCardNumber(groups ? groups.join(" ") : "");
-                    }}
-                    placeholder="1234 5678 9012 3456"
-                    inputMode="numeric"
-                    autoComplete="cc-number"
-                    required
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-2">
-                    <Label htmlFor="card-expiry">Expiry</Label>
-                    <Input
-                      id="card-expiry"
-                      value={cardExpiry}
-                      onChange={(e) => {
-                        const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
-                        const formatted =
-                          digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
-                        setCardExpiry(formatted);
-                      }}
-                      placeholder="MM/YY"
-                      inputMode="numeric"
-                      autoComplete="cc-exp"
-                      required
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="card-cvc">CVC</Label>
-                    <Input
-                      id="card-cvc"
-                      value={cardCvc}
-                      onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                      placeholder="123"
-                      inputMode="numeric"
-                      autoComplete="cc-csc"
-                      required
-                    />
-                  </div>
+              </div>
+
+              <div
+                className={cn(
+                  "rounded-lg border p-3 text-sm flex items-start gap-3 transition-colors",
+                  cardRequired
+                    ? "border-primary/30 bg-primary/5 text-foreground"
+                    : "border-border bg-muted/40 text-muted-foreground"
+                )}
+              >
+                <selectedPlan.icon className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                <div>
+                  <p className="font-semibold">
+                    {selectedPlan.name} ·{" "}
+                    {selectedPlan.monthly === 0 ? "Free forever" : `€${selectedPlan.monthly.toFixed(2)}/month`}
+                  </p>
+                  <p className="text-xs mt-0.5">{selectedPlan.tagline}</p>
                 </div>
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                Demo only — no real charge is made and card details are not stored.
-              </p>
             </div>
 
-            <Button
-              type="submit"
-              disabled={submitting}
-              className={cn(
-                "w-full h-12 text-base font-bold",
-                plan === "subscribe"
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "bg-orange-500 text-black hover:bg-orange-500/90"
-              )}
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Finishing sign-up…
-                </>
-              ) : plan === "subscribe" ? (
-                "Subscribe and finish sign-up"
+            <div className="space-y-4">
+              {cardRequired ? (
+                <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <CreditCard className="h-4 w-4 text-primary" />
+                    Payment method
+                  </div>
+                  <div className="space-y-3">
+                    <div className="grid gap-2">
+                      <Label htmlFor="card-name">Name on card</Label>
+                      <Input
+                        id="card-name"
+                        value={cardName}
+                        onChange={(e) => setCardName(e.target.value)}
+                        placeholder="Roman Bazinga"
+                        autoComplete="cc-name"
+                        required
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="card-number">Card number</Label>
+                      <Input
+                        id="card-number"
+                        value={cardNumber}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "").slice(0, 16);
+                          const groups = digits.match(/.{1,4}/g);
+                          setCardNumber(groups ? groups.join(" ") : "");
+                        }}
+                        placeholder="1234 5678 9012 3456"
+                        inputMode="numeric"
+                        autoComplete="cc-number"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="grid gap-2">
+                        <Label htmlFor="card-expiry">Expiry</Label>
+                        <Input
+                          id="card-expiry"
+                          value={cardExpiry}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                            const formatted =
+                              digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+                            setCardExpiry(formatted);
+                          }}
+                          placeholder="MM/YY"
+                          inputMode="numeric"
+                          autoComplete="cc-exp"
+                          required
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="card-cvc">CVC</Label>
+                        <Input
+                          id="card-cvc"
+                          value={cardCvc}
+                          onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                          placeholder="123"
+                          inputMode="numeric"
+                          autoComplete="cc-csc"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Demo only — no real charge is made and card details are not stored.
+                  </p>
+                </div>
               ) : (
-                "Start free trial and finish sign-up"
+                <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center">
+                  <CreditCard className="h-6 w-6 text-muted-foreground mx-auto" />
+                  <p className="mt-2 font-semibold">No card needed</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Free plan members can read sample issues right away. Upgrade anytime from your account.
+                  </p>
+                </div>
               )}
-            </Button>
 
-            <p className="text-[11px] text-muted-foreground text-center">
-              By continuing you agree to the Bazinga Terms of Use and Privacy Policy.
-            </p>
+              <Button
+                type="submit"
+                disabled={submitting}
+                className={cn(
+                  "w-full h-12 text-base font-bold",
+                  plan === "unlimited"
+                    ? "bg-gradient-to-r from-primary to-orange-500 text-white hover:opacity-90"
+                    : plan === "premium"
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                      : "bg-foreground text-background hover:bg-foreground/90"
+                )}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Finishing sign-up…
+                  </>
+                ) : plan === "free" ? (
+                  "Create my free account"
+                ) : plan === "unlimited" ? (
+                  "Unlock Unlimited and finish sign-up"
+                ) : (
+                  "Start Premium and finish sign-up"
+                )}
+              </Button>
+
+              <p className="text-[11px] text-muted-foreground text-center">
+                By continuing you agree to the Bazinga Terms of Use and Privacy Policy.
+              </p>
+            </div>
           </section>
         </form>
       </main>
@@ -380,78 +479,93 @@ const SignUpComplete = () => {
 };
 
 interface PlanCardProps {
+  option: PlanOption;
   selected: boolean;
   onSelect: () => void;
-  title: string;
-  price: string;
-  description: string;
-  icon: React.ReactNode;
-  accent?: "red" | "neutral";
-  recommended?: boolean;
 }
 
-const PlanCard = ({
-  selected,
-  onSelect,
-  title,
-  price,
-  description,
-  icon,
-  accent = "neutral",
-  recommended,
-}: PlanCardProps) => (
-  <button
-    type="button"
-    onClick={onSelect}
-    aria-pressed={selected}
-    className={cn(
-      "relative w-full text-left rounded-xl border-2 p-5 transition-all",
-      selected
-        ? accent === "red"
-          ? "border-primary bg-primary/5 shadow-[0_0_30px_hsl(0_82%_55%/0.18)]"
-          : "border-foreground bg-foreground/5"
-        : "border-border bg-card hover:border-foreground/40"
-    )}
-  >
-    {recommended && (
-      <span className="absolute -top-2.5 left-5 bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">
-        Most popular
-      </span>
-    )}
-    <div className="flex items-start gap-3">
-      <div
-        className={cn(
-          "h-9 w-9 rounded-md grid place-items-center shrink-0",
-          selected && accent === "red"
-            ? "bg-primary text-primary-foreground"
-            : "bg-muted text-muted-foreground"
-        )}
-      >
-        {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="font-bold text-foreground">{title}</p>
+const PlanCard = ({ option, selected, onSelect }: PlanCardProps) => {
+  const Icon = option.icon;
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={cn(
+        "relative text-left rounded-xl border-2 p-5 flex flex-col gap-4 transition-all",
+        selected
+          ? option.highlight
+            ? "border-primary bg-primary/5 shadow-[0_0_30px_hsl(0_82%_55%/0.2)]"
+            : option.id === "unlimited"
+              ? "border-orange-500 bg-orange-500/5"
+              : "border-foreground bg-foreground/5"
+          : "border-border bg-card hover:border-foreground/40"
+      )}
+    >
+      {option.badge && (
+        <span
+          className={cn(
+            "absolute -top-2.5 left-5 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full",
+            option.id === "unlimited"
+              ? "bg-orange-500 text-black"
+              : "bg-primary text-primary-foreground"
+          )}
+        >
+          {option.badge}
+        </span>
+      )}
+
+      <div className="flex items-start justify-between gap-3">
+        <div
+          className={cn(
+            "h-10 w-10 rounded-md grid place-items-center shrink-0",
+            option.id === "unlimited"
+              ? "bg-gradient-to-r from-primary to-orange-500 text-white"
+              : option.id === "premium"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground"
+          )}
+        >
+          <Icon className="h-5 w-5" />
         </div>
-        <p className="text-sm font-semibold text-primary mt-0.5">{price}</p>
-        <p className="text-sm text-muted-foreground mt-2 leading-snug">{description}</p>
+        <div
+          className={cn(
+            "h-5 w-5 rounded-full border-2 mt-1 grid place-items-center shrink-0",
+            selected
+              ? option.id === "unlimited"
+                ? "border-orange-500 bg-orange-500"
+                : "border-primary bg-primary"
+              : "border-muted-foreground/60"
+          )}
+        >
+          {selected && <span className="h-2 w-2 rounded-full bg-background" />}
+        </div>
       </div>
-      <div
-        className={cn(
-          "h-5 w-5 rounded-full border-2 shrink-0 mt-1 grid place-items-center",
-          selected
-            ? accent === "red"
-              ? "border-primary bg-primary"
-              : "border-foreground bg-foreground"
-            : "border-muted-foreground/60"
-        )}
-      >
-        {selected && (
-          <span className="h-2 w-2 rounded-full bg-background" />
-        )}
+
+      <div>
+        <p className="text-lg font-black">{option.name}</p>
+        <p className="text-xs text-muted-foreground">{option.tagline}</p>
       </div>
-    </div>
-  </button>
-);
+
+      <div className="flex items-baseline gap-1">
+        <span className="text-3xl font-black">
+          {option.monthly === 0 ? "€0" : `€${option.monthly.toFixed(2)}`}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {option.monthly === 0 ? "forever" : "/ month"}
+        </span>
+      </div>
+
+      <ul className="space-y-2 text-sm">
+        {option.benefits.map((benefit) => (
+          <li key={benefit} className="flex items-start gap-2">
+            <Check className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+            <span className="text-foreground/85">{benefit}</span>
+          </li>
+        ))}
+      </ul>
+    </button>
+  );
+};
 
 export default SignUpComplete;
