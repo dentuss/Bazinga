@@ -37,8 +37,9 @@ export const verifySignupToken = (token: string) =>
     `/api/auth/signup/verify?token=${encodeURIComponent(token)}`
   );
 
-export const createBillingIntent = (token: string) =>
+export const createBillingIntent = (token: string, signal?: AbortSignal) =>
   apiFetch<BillingIntentResponse>("/api/auth/signup/billing-intent", {
     method: "POST",
     body: JSON.stringify({ token }),
+    signal,
   });

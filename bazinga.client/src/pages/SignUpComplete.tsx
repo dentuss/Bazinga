@@ -60,7 +60,10 @@ const SignUpComplete = () => {
   const [billing, setBilling] = useState<BillingIntentResponse | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
-  // Mock-form state, only used when Stripe isn't configured.
+  const [billingReloadKey, setBillingReloadKey] = useState(0);
+  // Set when Stripe is unreachable and the user opts to use the test card form.
+  const [forceMock, setForceMock] = useState(false);
+  // Mock-form state, used when Stripe isn't configured or as a fallback.
   const [mockCard, setMockCard] = useState({
     name: "",
     number: "",
@@ -99,30 +102,50 @@ const SignUpComplete = () => {
     };
   }, [token]);
 
-  // Fetch the billing intent the first time we enter the card step.
+  // Fetch the billing intent when we enter the card step (and on retry). A
+  // hard timeout means a blocked outbound connection to Stripe surfaces as a
+  // clear error instead of an infinite spinner.
   useEffect(() => {
-    if (step !== "card" || billing || billingLoading) return;
+    if (step !== "card" || billing || forceMock) return;
     let cancelled = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 18000);
     setBillingLoading(true);
     setBillingError(null);
     void (async () => {
       try {
-        const result = await createBillingIntent(token);
+        const result = await createBillingIntent(token, controller.signal);
         if (!cancelled) setBilling(result);
       } catch (err) {
-        if (!cancelled) {
-          setBillingError(
-            err instanceof Error ? err.message : "Could not start card collection."
-          );
-        }
+        if (cancelled) return;
+        const aborted = err instanceof DOMException && err.name === "AbortError";
+        setBillingError(
+          aborted
+            ? "Connecting to Stripe timed out — the server may be unable to reach api.stripe.com."
+            : err instanceof Error
+              ? err.message
+              : "Could not start card collection."
+        );
       } finally {
+        clearTimeout(timeout);
         if (!cancelled) setBillingLoading(false);
       }
     })();
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
+      controller.abort();
     };
-  }, [step, billing, billingLoading, token]);
+  }, [step, billing, forceMock, token, billingReloadKey]);
+
+  const retryBilling = () => {
+    setBillingError(null);
+    setBillingReloadKey((k) => k + 1);
+  };
+  const useMockCard = () => {
+    setBillingError(null);
+    setForceMock(true);
+  };
 
   const reasonCopy = useMemo<{ title: string; body: string }>(() => {
     switch (invalidReason) {
@@ -305,11 +328,14 @@ const SignUpComplete = () => {
           billing={billing}
           billingLoading={billingLoading}
           billingError={billingError}
+          forceMock={forceMock}
           submitting={submitting}
           mockCard={mockCard}
           onMockChange={setMockCard}
           onMockSubmit={handleMockSubmit}
           onStripeSuccess={submit}
+          onRetry={retryBilling}
+          onUseMock={useMockCard}
           onBack={back}
         />
       )}
@@ -713,11 +739,14 @@ const CardStep = ({
   billing,
   billingLoading,
   billingError,
+  forceMock,
   submitting,
   mockCard,
   onMockChange,
   onMockSubmit,
   onStripeSuccess,
+  onRetry,
+  onUseMock,
   onBack,
 }: {
   path: Path;
@@ -725,11 +754,14 @@ const CardStep = ({
   billing: BillingIntentResponse | null;
   billingLoading: boolean;
   billingError: string | null;
+  forceMock: boolean;
   submitting: boolean;
   mockCard: { name: string; number: string; expiry: string; cvc: string };
   onMockChange: (card: { name: string; number: string; expiry: string; cvc: string }) => void;
   onMockSubmit: (e: React.FormEvent) => void;
   onStripeSuccess: (paymentMethodId: string) => Promise<void>;
+  onRetry: () => void;
+  onUseMock: () => void;
   onBack: () => void;
 }) => {
   const summary = useMemo(() => {
@@ -782,12 +814,29 @@ const CardStep = ({
             Preparing secure payment…
           </div>
         )}
-        {billingError && (
-          <p className="text-sm text-destructive" role="alert">
-            {billingError}
-          </p>
+        {billingError && !billingLoading && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 space-y-3" role="alert">
+            <p className="text-sm text-foreground">{billingError}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={onRetry} className="gap-2">
+                <Loader2 className="h-3.5 w-3.5" />
+                Retry Stripe
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={onUseMock}>
+                Use test card instead
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Tip: this usually means the API host can't reach api.stripe.com. Check the API
+              logs for the Stripe error.
+            </p>
+          </div>
         )}
-        {billing && billing.stripeConfigured && billing.publishableKey && billing.clientSecret ? (
+        {!forceMock &&
+        billing &&
+        billing.stripeConfigured &&
+        billing.publishableKey &&
+        billing.clientSecret ? (
           <StripeCardForm
             publishableKey={billing.publishableKey}
             clientSecret={billing.clientSecret}
@@ -795,7 +844,7 @@ const CardStep = ({
             submitLabel={summary.cta}
             onSubmit={(paymentMethodId) => onStripeSuccess(paymentMethodId)}
           />
-        ) : billing && !billing.stripeConfigured ? (
+        ) : forceMock || (billing && !billing.stripeConfigured) ? (
           <form onSubmit={onMockSubmit} className="space-y-4">
             <div className="rounded-lg border border-border bg-card p-4 space-y-4">
               <div className="flex items-center gap-2 text-sm font-semibold">
@@ -868,8 +917,8 @@ const CardStep = ({
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Stripe isn't configured on this environment — using a mock form. Set
-                STRIPE_SECRET_KEY + STRIPE_PUBLISHABLE_KEY for the real Stripe Elements form.
+                Mock card form — no real charge is made and details aren't stored. The real
+                Stripe Elements form is used when the API can reach Stripe with valid keys.
               </p>
             </div>
 

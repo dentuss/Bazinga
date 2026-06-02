@@ -190,14 +190,33 @@ public class AuthController : ControllerBase
             return Ok(new BillingIntentResponse { StripeConfigured = false });
         }
 
-        var intent = await _billing.CreateSetupIntentAsync(entity.Email, ct);
-        return Ok(new BillingIntentResponse
+        try
         {
-            StripeConfigured = true,
-            ClientSecret = intent.ClientSecret,
-            CustomerId = intent.CustomerId,
-            PublishableKey = _billing.PublishableKey,
-        });
+            var intent = await _billing.CreateSetupIntentAsync(entity.Email, ct);
+            return Ok(new BillingIntentResponse
+            {
+                StripeConfigured = true,
+                ClientSecret = intent.ClientSecret,
+                CustomerId = intent.CustomerId,
+                PublishableKey = _billing.PublishableKey,
+            });
+        }
+        catch (Stripe.StripeException ex)
+        {
+            // Bad key, declined request, etc. — Stripe answered, so report it.
+            return StatusCode(StatusCodes.Status502BadGateway,
+                $"Stripe rejected the request: {ex.StripeError?.Message ?? ex.Message}");
+        }
+        catch (OperationCanceledException)
+        {
+            return StatusCode(StatusCodes.Status504GatewayTimeout,
+                "Timed out reaching Stripe. The server may be unable to reach api.stripe.com.");
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(StatusCodes.Status504GatewayTimeout,
+                $"Could not reach Stripe ({ex.Message}). Check the server's outbound network access.");
+        }
     }
 
     /// <summary>
