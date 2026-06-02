@@ -10,7 +10,7 @@ export type SignupVerifyResponse = {
   reason?: SignupVerifyReason;
 };
 
-export type SignupPlan = "subscribe" | "trial";
+export type SignupPlan = "free" | "premium" | "unlimited";
 
 export const checkSignupEmail = (email: string) =>
   apiFetch<EmailAvailability>("/api/auth/signup/check", {

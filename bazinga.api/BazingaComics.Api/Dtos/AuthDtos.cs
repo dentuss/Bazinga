@@ -53,6 +53,6 @@ public class SignupCompleteRequest
 {
     public string? Token { get; set; }
     public string? Password { get; set; }
-    /// <summary>"subscribe" or "trial"</summary>
+    /// <summary>"free", "premium" or "unlimited"</summary>
     public string? Plan { get; set; }
 }

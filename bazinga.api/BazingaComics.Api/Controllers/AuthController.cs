@@ -188,12 +188,15 @@ public class AuthController : ControllerBase
             return BadRequest("An account with this email already exists.");
         }
 
-        var plan = (req.Plan ?? "trial").Trim().ToLowerInvariant();
+        var plan = (req.Plan ?? "free").Trim().ToLowerInvariant();
         var (subscriptionType, subscriptionExpiration) = plan switch
         {
-            "subscribe" or "premium" or "subscribe-now" =>
-                ("Premium", DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))),
-            _ => ("Premium", DateOnly.FromDateTime(DateTime.UtcNow.AddDays(3))) // trial
+            "unlimited" =>
+                ("Unlimited", (DateOnly?)DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))),
+            "premium" =>
+                ("Premium", (DateOnly?)DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))),
+            _ =>
+                ("Free", (DateOnly?)null),
         };
 
         var username = await GenerateUniqueUsername(entity.Email, ct);
