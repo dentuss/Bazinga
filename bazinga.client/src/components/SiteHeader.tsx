@@ -66,7 +66,7 @@ const SiteHeader = ({
   homeLink = "/",
   avatarAccent = "red",
 }: SiteHeaderProps) => {
-  const { user, profiles, currentProfile, selectProfile, logout } = useAuth();
+  const { user, profiles, currentProfile, hasPaidSubscription, selectProfile, logout } = useAuth();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -180,12 +180,14 @@ const SiteHeader = ({
           <Button variant="ghost" size="icon" aria-label="Search" className="hidden sm:flex">
             <Search className="h-5 w-5" />
           </Button>
-          <Link to="/bazinga-unlimited" className="hidden sm:block">
-            <Button className="bg-gradient-to-r from-primary via-primary to-orange-500 hover:opacity-90 text-white font-bold uppercase tracking-wider shadow-lg shadow-[hsl(var(--shadow-glow))] border-0">
-              <Sparkles className="h-4 w-4" />
-              Join Now
-            </Button>
-          </Link>
+          {!hasPaidSubscription && (
+            <Link to="/bazinga-unlimited" className="hidden sm:block">
+              <Button className="bg-gradient-to-r from-primary via-primary to-orange-500 hover:opacity-90 text-white font-bold uppercase tracking-wider shadow-lg shadow-[hsl(var(--shadow-glow))] border-0">
+                <Sparkles className="h-4 w-4" />
+                Join Now
+              </Button>
+            </Link>
+          )}
 
           {user ? (
             <DropdownMenu>
@@ -361,16 +363,18 @@ const SiteHeader = ({
                 ))}
               </ul>
               <div className="mt-6 flex flex-col gap-3">
-                <Button
-                  onClick={() => {
-                    setMobileOpen(false);
-                    navigate("/bazinga-unlimited");
-                  }}
-                  className="w-full bg-gradient-to-r from-primary via-primary to-orange-500 text-white font-bold uppercase tracking-wider border-0"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Join Now
-                </Button>
+                {!hasPaidSubscription && (
+                  <Button
+                    onClick={() => {
+                      setMobileOpen(false);
+                      navigate("/bazinga-unlimited");
+                    }}
+                    className="w-full bg-gradient-to-r from-primary via-primary to-orange-500 text-white font-bold uppercase tracking-wider border-0"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Join Now
+                  </Button>
+                )}
                 {user ? (
                   <>
                     <Button

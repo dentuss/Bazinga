@@ -10,7 +10,15 @@ export type SignupVerifyResponse = {
   reason?: SignupVerifyReason;
 };
 
-export type SignupPlan = "free" | "premium" | "unlimited";
+/** Plan tokens accepted by `/api/auth/signup/complete`. */
+export type SignupPlan = "trial" | "comics" | "tv" | "unlimited";
+
+export type BillingIntentResponse = {
+  stripeConfigured: boolean;
+  clientSecret?: string;
+  publishableKey?: string;
+  customerId?: string;
+};
 
 export const checkSignupEmail = (email: string) =>
   apiFetch<EmailAvailability>("/api/auth/signup/check", {
@@ -28,3 +36,9 @@ export const verifySignupToken = (token: string) =>
   apiFetch<SignupVerifyResponse>(
     `/api/auth/signup/verify?token=${encodeURIComponent(token)}`
   );
+
+export const createBillingIntent = (token: string) =>
+  apiFetch<BillingIntentResponse>("/api/auth/signup/billing-intent", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });

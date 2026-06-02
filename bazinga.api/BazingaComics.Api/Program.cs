@@ -33,6 +33,14 @@ builder.Services.Configure<EmailOptions>(opt =>
     opt.PublicBaseUrl = Environment.GetEnvironmentVariable("APP_PUBLIC_BASE_URL") ?? section.PublicBaseUrl;
 });
 
+// Configuration: Stripe options (env vars override appsettings).
+builder.Services.Configure<StripeOptions>(opt =>
+{
+    var section = builder.Configuration.GetSection(StripeOptions.SectionName).Get<StripeOptions>() ?? new StripeOptions();
+    opt.SecretKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? section.SecretKey;
+    opt.PublishableKey = Environment.GetEnvironmentVariable("STRIPE_PUBLISHABLE_KEY") ?? section.PublishableKey;
+});
+
 // EF Core + MySQL via Pomelo
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Missing connection string 'DefaultConnection'.");
@@ -101,6 +109,10 @@ else
 {
     builder.Services.AddSingleton<IEmailSender, LoggingEmailSender>();
 }
+
+// Billing — Stripe (test or live keys). The service reports IsConfigured=false
+// when keys are missing; the signup wizard then falls back to a mock card form.
+builder.Services.AddSingleton<IBillingService, StripeBillingService>();
 
 // Controllers + JSON
 builder.Services.AddControllers()
