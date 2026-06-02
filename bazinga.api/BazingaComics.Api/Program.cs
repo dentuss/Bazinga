@@ -114,6 +114,17 @@ else
 // when keys are missing; the signup wizard then falls back to a mock card form.
 builder.Services.AddSingleton<IBillingService, StripeBillingService>();
 
+// Metadata proxy → Jikan v4 (no auth, MyAnimeList data for anime + manga).
+// Cached in-memory so repeat requests don't hit Jikan and stay within their
+// ~3 req/sec rate budget.
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<IJikanService, JikanService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.jikan.moe/v4/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("BazingaComics/1.0 (+https://bazinga.local)");
+});
+
 // Controllers + JSON
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
