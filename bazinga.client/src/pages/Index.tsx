@@ -7,6 +7,7 @@ import ComicSection from "@/components/ComicSection";
 import Footer from "@/components/Footer";
 import BrowseByFilter from "@/components/BrowseByFilter";
 import ComicModal from "@/components/ComicModal";
+import MangaUniverse from "@/components/MangaUniverse";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { resolveImageUrl } from "@/lib/images";
@@ -210,6 +211,7 @@ const Index = () => {
               viewAllHref="/comics?view=all"
               onComicClick={handleComicClick}
             />
+            <MangaUniverse />
           </>
         )}
       </main>
