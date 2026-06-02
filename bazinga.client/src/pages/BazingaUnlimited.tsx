@@ -3,8 +3,8 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
-import { BookOpen, Tv, Sparkles, Check } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft, BookOpen, Tv, Sparkles, Check, ShieldAlert } from "lucide-react";
 
 type Plan = {
   id: "Comics" | "TV" | "Unlimited";
@@ -76,9 +76,11 @@ const plans: Plan[] = [
 ];
 
 const BazingaUnlimited = () => {
-  const { user } = useAuth();
+  const { user, trialExpired } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const fromTrialExpired = searchParams.get("from") === "trial-expired" || trialExpired;
 
   const handleSubscribe = (plan: Plan["id"], billingCycle: "monthly" | "yearly") => {
     if (!user) {
@@ -102,6 +104,30 @@ const BazingaUnlimited = () => {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-16">
+        {!fromTrialExpired && (
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </button>
+        )}
+
+        {fromTrialExpired && (
+          <div className="max-w-3xl mx-auto mb-10 rounded-xl border-2 border-orange-500/50 bg-orange-500/10 p-5 flex items-start gap-4">
+            <ShieldAlert className="h-6 w-6 text-orange-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-bold text-foreground">Your 7-day trial has ended</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Pick a plan below to keep reading and watching. Your account, profiles and viewing
+                history stay exactly where you left them.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="max-w-4xl mx-auto text-center space-y-4">
           <p className="text-sm font-semibold uppercase tracking-[0.3em] bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">
             Bazinga Subscriptions

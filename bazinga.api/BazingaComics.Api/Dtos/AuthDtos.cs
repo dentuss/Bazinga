@@ -53,6 +53,21 @@ public class SignupCompleteRequest
 {
     public string? Token { get; set; }
     public string? Password { get; set; }
-    /// <summary>"free", "premium" or "unlimited"</summary>
+    /// <summary>"trial", "comics", "tv" or "unlimited"</summary>
     public string? Plan { get; set; }
+    /// <summary>Stripe payment_method id (pm_…), optional when running with mock fallback.</summary>
+    public string? PaymentMethodId { get; set; }
+}
+
+public class BillingIntentRequest
+{
+    public string? Token { get; set; }
+}
+
+public class BillingIntentResponse
+{
+    public bool StripeConfigured { get; set; }
+    public string? ClientSecret { get; set; }
+    public string? PublishableKey { get; set; }
+    public string? CustomerId { get; set; }
 }

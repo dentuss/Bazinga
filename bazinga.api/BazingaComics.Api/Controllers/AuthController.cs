@@ -20,19 +20,22 @@ public class AuthController : ControllerBase
     private readonly IJwtService _jwt;
     private readonly IEmailSender _emailSender;
     private readonly EmailOptions _emailOptions;
+    private readonly IBillingService _billing;
 
     public AuthController(
         AppDbContext db,
         IPasswordHasher hasher,
         IJwtService jwt,
         IEmailSender emailSender,
-        IOptions<EmailOptions> emailOptions)
+        IOptions<EmailOptions> emailOptions,
+        IBillingService billing)
     {
         _db = db;
         _hasher = hasher;
         _jwt = jwt;
         _emailSender = emailSender;
         _emailOptions = emailOptions.Value;
+        _billing = billing;
     }
 
     [HttpPost("register")]
@@ -164,6 +167,40 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Creates a Stripe SetupIntent for the email behind the magic link so the
+    /// signup wizard can collect a card via Stripe Elements. When Stripe isn't
+    /// configured the client falls back to a mock card form.
+    /// </summary>
+    [HttpPost("signup/billing-intent")]
+    public async Task<ActionResult<BillingIntentResponse>> SignupBillingIntent(
+        [FromBody] BillingIntentRequest req,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Token)) return BadRequest("Token is required.");
+
+        var hash = SignupTokens.Hash(req.Token!);
+        var entity = await _db.SignupTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+        if (entity is null || entity.ConsumedAt is not null || entity.ExpiresAt < DateTime.UtcNow)
+        {
+            return BadRequest("Invalid or expired sign-up link.");
+        }
+
+        if (!_billing.IsConfigured)
+        {
+            return Ok(new BillingIntentResponse { StripeConfigured = false });
+        }
+
+        var intent = await _billing.CreateSetupIntentAsync(entity.Email, ct);
+        return Ok(new BillingIntentResponse
+        {
+            StripeConfigured = true,
+            ClientSecret = intent.ClientSecret,
+            CustomerId = intent.CustomerId,
+            PublishableKey = _billing.PublishableKey,
+        });
+    }
+
+    /// <summary>
     /// Consumes the magic link, creates the account, and returns an auth token.
     /// </summary>
     [HttpPost("signup/complete")]
@@ -188,15 +225,17 @@ public class AuthController : ControllerBase
             return BadRequest("An account with this email already exists.");
         }
 
-        var plan = (req.Plan ?? "free").Trim().ToLowerInvariant();
+        var plan = (req.Plan ?? "trial").Trim().ToLowerInvariant();
         var (subscriptionType, subscriptionExpiration) = plan switch
         {
             "unlimited" =>
                 ("Unlimited", (DateOnly?)DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))),
-            "premium" =>
-                ("Premium", (DateOnly?)DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))),
+            "comics" =>
+                ("Comics", (DateOnly?)DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))),
+            "tv" =>
+                ("TV", (DateOnly?)DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))),
             _ =>
-                ("Free", (DateOnly?)null),
+                ("Trial", (DateOnly?)DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7))),
         };
 
         var username = await GenerateUniqueUsername(entity.Email, ct);

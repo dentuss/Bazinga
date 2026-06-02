@@ -15,13 +15,22 @@ public static class PricingService
             return basePrice;
         }
 
-        if (string.Equals(subscription, "Unlimited", StringComparison.OrdinalIgnoreCase))
+        // Unlimited and Trial unlock digital reading entirely and halve physical.
+        if (string.Equals(subscription, "Unlimited", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(subscription, "Trial", StringComparison.OrdinalIgnoreCase))
         {
             return purchaseType == PurchaseType.DIGITAL
                 ? 0m
                 : Math.Round(basePrice * 0.5m, 2);
         }
 
+        // Dedicated Comics plan: digital reading free, physical at full price.
+        if (string.Equals(subscription, "Comics", StringComparison.OrdinalIgnoreCase))
+        {
+            return purchaseType == PurchaseType.DIGITAL ? 0m : basePrice;
+        }
+
+        // Legacy Premium tier kept for backwards compatibility.
         if (string.Equals(subscription, "Premium", StringComparison.OrdinalIgnoreCase))
         {
             return purchaseType == PurchaseType.DIGITAL
@@ -29,6 +38,7 @@ public static class PricingService
                 : basePrice;
         }
 
+        // TV plan has no comic discount.
         return basePrice;
     }
 

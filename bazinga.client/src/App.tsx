@@ -32,9 +32,10 @@ import SignUpComplete from "./pages/SignUpComplete";
 const queryClient = new QueryClient();
 
 const RootGate = () => {
-  const { user, currentProfile } = useAuth();
+  const { user, currentProfile, trialExpired } = useAuth();
   if (!user) return <Landing />;
   if (!currentProfile) return <Navigate to="/profiles" replace />;
+  if (trialExpired) return <Navigate to="/bazinga-unlimited?from=trial-expired" replace />;
   return <Choice />;
 };
 
@@ -45,9 +46,12 @@ const RequireAuth = ({ children }: { children: React.ReactNode }) => {
 };
 
 const RequireProfile = ({ children }: { children: React.ReactNode }) => {
-  const { user, currentProfile } = useAuth();
+  const { user, currentProfile, trialExpired } = useAuth();
   if (!user) return <Navigate to="/auth" replace />;
   if (!currentProfile) return <Navigate to="/profiles" replace />;
+  // After the 7-day trial ends the user must pick a paid plan to keep using the
+  // app. We allow Manage/Account/profile routes through; only content is gated.
+  if (trialExpired) return <Navigate to="/bazinga-unlimited?from=trial-expired" replace />;
   return <>{children}</>;
 };
 

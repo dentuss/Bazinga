@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
+  ArrowLeft,
   BookOpen,
   Check,
   CreditCard,
   Loader2,
   Lock,
+  Rocket,
   Sparkles,
+  Tv,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,70 +18,23 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { verifySignupToken, type SignupPlan, type SignupVerifyReason } from "@/lib/signup";
+import {
+  createBillingIntent,
+  verifySignupToken,
+  type BillingIntentResponse,
+  type SignupPlan,
+  type SignupVerifyReason,
+} from "@/lib/signup";
+import {
+  subscriptionPlans,
+  type SubscriptionPlan,
+  type SubscriptionPlanId,
+} from "@/data/subscriptionPlans";
+import StripeCardForm from "@/components/StripeCardForm";
 import heroBanner from "@/assets/hero-banner-1.jpg";
-import comic1 from "@/assets/comic-1.jpg";
-import comic2 from "@/assets/comic-2.jpg";
-import comic3 from "@/assets/comic-3.jpg";
-import comic4 from "@/assets/comic-4.jpg";
-import comic5 from "@/assets/comic-5.jpg";
 
-const trendingCovers = [comic1, comic2, comic3, comic4, comic5];
-
-type PlanOption = {
-  id: SignupPlan;
-  name: string;
-  tagline: string;
-  monthly: number;
-  benefits: string[];
-  icon: typeof BookOpen;
-  badge?: string;
-  highlight?: boolean;
-};
-
-const planOptions: PlanOption[] = [
-  {
-    id: "free",
-    name: "Free",
-    tagline: "Sample the universe.",
-    monthly: 0,
-    icon: BookOpen,
-    benefits: [
-      "Browse the full Bazinga catalog",
-      "Read sample issues every week",
-      "No card required, no commitment",
-    ],
-  },
-  {
-    id: "premium",
-    name: "Premium",
-    tagline: "Read everything, save on the rest.",
-    monthly: 4.99,
-    icon: Sparkles,
-    badge: "Most popular",
-    highlight: true,
-    benefits: [
-      "Unlimited reading on Bazinga Comics",
-      "25% off every physical and digital comic",
-      "Offline downloads on phone and tablet",
-    ],
-  },
-  {
-    id: "unlimited",
-    name: "Unlimited",
-    tagline: "Both worlds, one subscription.",
-    monthly: 14.99,
-    icon: Sparkles,
-    badge: "Best value",
-    benefits: [
-      "Everything in Premium",
-      "Unlimited BazingaTV streaming in 4K HDR",
-      "Exclusive Unlimited-only drops and previews",
-    ],
-  },
-];
-
-const planRequiresCard = (plan: SignupPlan) => plan !== "free";
+type Step = "welcome" | "password" | "plan" | "card";
+type Path = "free" | "paid";
 
 const SignUpComplete = () => {
   const navigate = useNavigate();
@@ -87,17 +43,30 @@ const SignUpComplete = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") ?? "";
 
-  const [loading, setLoading] = useState(true);
+  // --- verification of the magic link --------------------------------------
+  const [verifying, setVerifying] = useState(true);
   const [email, setEmail] = useState<string | null>(null);
   const [invalidReason, setInvalidReason] = useState<SignupVerifyReason | null>(null);
 
-  const [plan, setPlan] = useState<SignupPlan>("premium");
+  // --- wizard state --------------------------------------------------------
+  const [step, setStep] = useState<Step>("welcome");
+  const [path, setPath] = useState<Path | null>(null);
   const [password, setPassword] = useState("");
-  const [cardName, setCardName] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvc, setCardCvc] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [planId, setPlanId] = useState<SubscriptionPlanId>("unlimited");
   const [submitting, setSubmitting] = useState(false);
+
+  // --- billing (lazy: only loaded when we hit the card step) ---------------
+  const [billing, setBilling] = useState<BillingIntentResponse | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  // Mock-form state, only used when Stripe isn't configured.
+  const [mockCard, setMockCard] = useState({
+    name: "",
+    number: "",
+    expiry: "",
+    cvc: "",
+  });
 
   useEffect(() => {
     document.title = "Finish sign-up · Bazinga";
@@ -106,7 +75,7 @@ const SignUpComplete = () => {
   useEffect(() => {
     if (!token) {
       setInvalidReason("invalid");
-      setLoading(false);
+      setVerifying(false);
       return;
     }
     let cancelled = false;
@@ -122,13 +91,38 @@ const SignUpComplete = () => {
       } catch {
         if (!cancelled) setInvalidReason("invalid");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setVerifying(false);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [token]);
+
+  // Fetch the billing intent the first time we enter the card step.
+  useEffect(() => {
+    if (step !== "card" || billing || billingLoading) return;
+    let cancelled = false;
+    setBillingLoading(true);
+    setBillingError(null);
+    void (async () => {
+      try {
+        const result = await createBillingIntent(token);
+        if (!cancelled) setBilling(result);
+      } catch (err) {
+        if (!cancelled) {
+          setBillingError(
+            err instanceof Error ? err.message : "Could not start card collection."
+          );
+        }
+      } finally {
+        if (!cancelled) setBillingLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step, billing, billingLoading, token]);
 
   const reasonCopy = useMemo<{ title: string; body: string }>(() => {
     switch (invalidReason) {
@@ -150,11 +144,18 @@ const SignUpComplete = () => {
     }
   }, [invalidReason]);
 
-  const selectedPlan = planOptions.find((p) => p.id === plan) ?? planOptions[1];
-  const cardRequired = planRequiresCard(plan);
+  // ---- step transitions ---------------------------------------------------
+  const chooseFreePath = () => {
+    setPath("free");
+    setStep("password");
+  };
+  const choosePaidPath = () => {
+    setPath("paid");
+    setStep("password");
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePasswordContinue = (event: React.FormEvent) => {
+    event.preventDefault();
     if (password.length < 6) {
       toast({
         title: "Password too short",
@@ -163,29 +164,48 @@ const SignUpComplete = () => {
       });
       return;
     }
-    if (cardRequired) {
-      const digits = cardNumber.replace(/\s/g, "");
-      if (!cardName.trim() || digits.length < 12 || !cardExpiry || cardCvc.length < 3) {
-        toast({
-          title: "Card details required",
-          description: "Paid plans need a card on file.",
-          variant: "destructive",
-        });
-        return;
-      }
+    if (password !== confirmPassword) {
+      toast({
+        title: "Passwords don't match",
+        description: "Re-enter your password to confirm.",
+        variant: "destructive",
+      });
+      return;
     }
+    setStep(path === "paid" ? "plan" : "card");
+  };
+
+  const handlePlanContinue = () => setStep("card");
+
+  const back = () => {
+    if (step === "password") {
+      setStep("welcome");
+    } else if (step === "plan") {
+      setStep("password");
+    } else if (step === "card") {
+      setStep(path === "paid" ? "plan" : "password");
+    }
+  };
+
+  // ---- submit -------------------------------------------------------------
+  const finalPlan = useMemo<SignupPlan>(
+    () => (path === "paid" ? planId : "trial"),
+    [path, planId]
+  );
+
+  const submit = async (paymentMethodId: string | null) => {
     setSubmitting(true);
     try {
-      await completeSignup(token, password, plan);
-      toast({
-        title:
-          plan === "free"
-            ? "Welcome to Bazinga"
-            : plan === "unlimited"
-              ? "Bazinga Unlimited unlocked"
-              : "Bazinga Premium activated",
-        description: "Pick a profile to get going.",
-      });
+      await completeSignup(token, password, finalPlan, paymentMethodId);
+      const title =
+        finalPlan === "trial"
+          ? "Your 7-day trial has started"
+          : finalPlan === "unlimited"
+            ? "Bazinga Unlimited unlocked"
+            : finalPlan === "tv"
+              ? "Bazinga TV activated"
+              : "Bazinga Comics activated";
+      toast({ title, description: "Pick a profile to get going." });
       navigate("/profiles", { replace: true });
     } catch (err) {
       toast({
@@ -198,7 +218,22 @@ const SignUpComplete = () => {
     }
   };
 
-  if (loading) {
+  const handleMockSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const digits = mockCard.number.replace(/\s/g, "");
+    if (!mockCard.name.trim() || digits.length < 12 || !mockCard.expiry || mockCard.cvc.length < 3) {
+      toast({
+        title: "Card details required",
+        description: "All paths require a card on file.",
+        variant: "destructive",
+      });
+      return;
+    }
+    await submit(null);
+  };
+
+  // ---- early-return states ------------------------------------------------
+  if (verifying) {
     return (
       <div className="min-h-screen bg-background grid place-items-center text-foreground">
         <div className="flex items-center gap-3 text-muted-foreground">
@@ -211,281 +246,385 @@ const SignUpComplete = () => {
 
   if (invalidReason) {
     return (
-      <div className="min-h-screen bg-background flex flex-col text-foreground">
-        <header className="border-b border-border">
-          <div className="container mx-auto px-4 md:px-8 h-16 flex items-center">
-            <Link to="/" className="text-2xl font-black tracking-tighter text-primary">
-              BAZINGA
+      <WizardShell email={null} onLeaveTo="/">
+        <div className="max-w-md mx-auto text-center space-y-5">
+          <div className="mx-auto h-14 w-14 rounded-full bg-destructive/15 grid place-items-center">
+            <XCircle className="h-7 w-7 text-destructive" />
+          </div>
+          <h1 className="text-2xl md:text-3xl font-black tracking-tight">{reasonCopy.title}</h1>
+          <p className="text-sm text-muted-foreground">{reasonCopy.body}</p>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Link to="/">
+              <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+                Start over
+              </Button>
+            </Link>
+            <Link to="/auth?mode=signin">
+              <Button variant="outline">Sign in instead</Button>
             </Link>
           </div>
-        </header>
-        <main className="flex-1 flex items-center justify-center px-4 py-12">
-          <div className="max-w-md text-center space-y-5">
-            <div className="mx-auto h-14 w-14 rounded-full bg-destructive/15 grid place-items-center">
-              <XCircle className="h-7 w-7 text-destructive" />
-            </div>
-            <h1 className="text-2xl md:text-3xl font-black tracking-tight">{reasonCopy.title}</h1>
-            <p className="text-sm text-muted-foreground">{reasonCopy.body}</p>
-            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-              <Link to="/">
-                <Button variant="default" className="bg-primary text-primary-foreground hover:bg-primary/90">
-                  Start over
-                </Button>
-              </Link>
-              <Link to="/auth?mode=signin">
-                <Button variant="outline">Sign in instead</Button>
-              </Link>
-            </div>
-          </div>
-        </main>
-      </div>
+        </div>
+      </WizardShell>
     );
   }
 
+  // ---- render the current step --------------------------------------------
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Hero */}
-      <section className="relative overflow-hidden border-b border-border">
-        <div className="absolute inset-0">
-          <img src={heroBanner} alt="" className="h-full w-full object-cover opacity-60" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/85 to-background/30" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_hsl(0_82%_55%_/_0.25),_transparent_70%)]" />
-        </div>
-        <header className="relative z-20">
-          <div className="container mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
-            <Link to="/" className="text-2xl md:text-3xl font-black tracking-tighter text-primary">
-              BAZINGA
-            </Link>
-            <span className="text-xs md:text-sm text-muted-foreground hidden sm:inline">
-              Signed up as <span className="font-semibold text-foreground">{email}</span>
-            </span>
-          </div>
-        </header>
+    <WizardShell email={email} onLeaveTo={`/signup/check-email?email=${encodeURIComponent(email ?? "")}`}>
+      <StepIndicator step={step} path={path} />
 
-        <div className="relative z-10 container mx-auto px-4 md:px-8 pt-12 md:pt-16 pb-10 text-center">
-          <p className="text-xs md:text-sm font-bold uppercase tracking-[0.4em] text-primary">
-            You're almost in
-          </p>
-          <h1 className="mt-3 text-3xl md:text-5xl lg:text-6xl font-black tracking-tight max-w-3xl mx-auto leading-tight">
-            Pick the plan that fits.
-          </h1>
-          <p className="mt-3 text-sm md:text-base text-muted-foreground">
-            Start free, upgrade anytime. Paid plans renew monthly — cancel from your account.
-          </p>
-        </div>
+      {step === "welcome" && (
+        <WelcomeStep onFree={chooseFreePath} onPaid={choosePaidPath} email={email} />
+      )}
 
-        <div className="relative z-10 container mx-auto px-4 md:px-8 pb-12">
-          <div className="flex justify-center gap-3 overflow-hidden">
-            {trendingCovers.map((src, idx) => (
-              <div
-                key={idx}
-                className="hidden md:block w-28 lg:w-36 shrink-0 rounded-md overflow-hidden shadow-xl"
-                style={{ transform: `translateY(${idx % 2 === 0 ? "0" : "16px"})` }}
-              >
-                <img src={src} alt="" className="w-full aspect-[2/3] object-cover" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {step === "password" && (
+        <PasswordStep
+          password={password}
+          confirmPassword={confirmPassword}
+          onPasswordChange={setPassword}
+          onConfirmChange={setConfirmPassword}
+          onContinue={handlePasswordContinue}
+          onBack={back}
+          path={path!}
+        />
+      )}
 
-      {/* Form */}
-      <main className="container mx-auto px-4 md:px-8 py-12 md:py-16">
-        <form onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-10">
-          {/* Plan grid */}
-          <section>
-            <div className="text-center mb-6">
-              <h2 className="text-xl md:text-2xl font-black tracking-tight">Choose your plan</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                You can change plans anytime from your account.
-              </p>
-            </div>
+      {step === "plan" && (
+        <PlanStep
+          planId={planId}
+          onSelect={setPlanId}
+          onContinue={handlePlanContinue}
+          onBack={back}
+        />
+      )}
 
-            <div className="grid gap-4 md:grid-cols-3">
-              {planOptions.map((option) => (
-                <PlanCard
-                  key={option.id}
-                  option={option}
-                  selected={plan === option.id}
-                  onSelect={() => setPlan(option.id)}
-                />
-              ))}
-            </div>
-          </section>
-
-          {/* Password + card */}
-          <section className="grid gap-6 lg:grid-cols-2 max-w-3xl mx-auto">
-            <div className="space-y-5">
-              <div>
-                <h2 className="text-xl md:text-2xl font-black tracking-tight">Set up your account</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Set a password so you can sign back in later.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="signup-password">Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="signup-password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="At least 6 characters"
-                    className="pl-9"
-                    autoComplete="new-password"
-                    required
-                    minLength={6}
-                  />
-                </div>
-              </div>
-
-              <div
-                className={cn(
-                  "rounded-lg border p-3 text-sm flex items-start gap-3 transition-colors",
-                  cardRequired
-                    ? "border-primary/30 bg-primary/5 text-foreground"
-                    : "border-border bg-muted/40 text-muted-foreground"
-                )}
-              >
-                <selectedPlan.icon className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-                <div>
-                  <p className="font-semibold">
-                    {selectedPlan.name} ·{" "}
-                    {selectedPlan.monthly === 0 ? "Free forever" : `€${selectedPlan.monthly.toFixed(2)}/month`}
-                  </p>
-                  <p className="text-xs mt-0.5">{selectedPlan.tagline}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {cardRequired ? (
-                <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <CreditCard className="h-4 w-4 text-primary" />
-                    Payment method
-                  </div>
-                  <div className="space-y-3">
-                    <div className="grid gap-2">
-                      <Label htmlFor="card-name">Name on card</Label>
-                      <Input
-                        id="card-name"
-                        value={cardName}
-                        onChange={(e) => setCardName(e.target.value)}
-                        placeholder="Roman Bazinga"
-                        autoComplete="cc-name"
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="card-number">Card number</Label>
-                      <Input
-                        id="card-number"
-                        value={cardNumber}
-                        onChange={(e) => {
-                          const digits = e.target.value.replace(/\D/g, "").slice(0, 16);
-                          const groups = digits.match(/.{1,4}/g);
-                          setCardNumber(groups ? groups.join(" ") : "");
-                        }}
-                        placeholder="1234 5678 9012 3456"
-                        inputMode="numeric"
-                        autoComplete="cc-number"
-                        required
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="grid gap-2">
-                        <Label htmlFor="card-expiry">Expiry</Label>
-                        <Input
-                          id="card-expiry"
-                          value={cardExpiry}
-                          onChange={(e) => {
-                            const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
-                            const formatted =
-                              digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
-                            setCardExpiry(formatted);
-                          }}
-                          placeholder="MM/YY"
-                          inputMode="numeric"
-                          autoComplete="cc-exp"
-                          required
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="card-cvc">CVC</Label>
-                        <Input
-                          id="card-cvc"
-                          value={cardCvc}
-                          onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                          placeholder="123"
-                          inputMode="numeric"
-                          autoComplete="cc-csc"
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Demo only — no real charge is made and card details are not stored.
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center">
-                  <CreditCard className="h-6 w-6 text-muted-foreground mx-auto" />
-                  <p className="mt-2 font-semibold">No card needed</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Free plan members can read sample issues right away. Upgrade anytime from your account.
-                  </p>
-                </div>
-              )}
-
-              <Button
-                type="submit"
-                disabled={submitting}
-                className={cn(
-                  "w-full h-12 text-base font-bold",
-                  plan === "unlimited"
-                    ? "bg-gradient-to-r from-primary to-orange-500 text-white hover:opacity-90"
-                    : plan === "premium"
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                      : "bg-foreground text-background hover:bg-foreground/90"
-                )}
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Finishing sign-up…
-                  </>
-                ) : plan === "free" ? (
-                  "Create my free account"
-                ) : plan === "unlimited" ? (
-                  "Unlock Unlimited and finish sign-up"
-                ) : (
-                  "Start Premium and finish sign-up"
-                )}
-              </Button>
-
-              <p className="text-[11px] text-muted-foreground text-center">
-                By continuing you agree to the Bazinga Terms of Use and Privacy Policy.
-              </p>
-            </div>
-          </section>
-        </form>
-      </main>
-    </div>
+      {step === "card" && (
+        <CardStep
+          path={path!}
+          finalPlan={finalPlan}
+          billing={billing}
+          billingLoading={billingLoading}
+          billingError={billingError}
+          submitting={submitting}
+          mockCard={mockCard}
+          onMockChange={setMockCard}
+          onMockSubmit={handleMockSubmit}
+          onStripeSuccess={submit}
+          onBack={back}
+        />
+      )}
+    </WizardShell>
   );
 };
 
-interface PlanCardProps {
-  option: PlanOption;
+// =============================================================================
+// Shell + step components
+// =============================================================================
+
+const WizardShell = ({
+  email,
+  onLeaveTo,
+  children,
+}: {
+  email: string | null;
+  onLeaveTo: string;
+  children: React.ReactNode;
+}) => (
+  <div className="min-h-screen bg-background text-foreground">
+    <section className="relative overflow-hidden border-b border-border">
+      <div className="absolute inset-0">
+        <img src={heroBanner} alt="" className="h-full w-full object-cover opacity-40" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/90 to-background/40" />
+      </div>
+      <header className="relative z-20">
+        <div className="container mx-auto px-4 md:px-8 h-16 flex items-center justify-between gap-4">
+          <Link to="/" className="text-2xl md:text-3xl font-black tracking-tighter text-primary">
+            BAZINGA
+          </Link>
+          <Link
+            to={onLeaveTo}
+            className="inline-flex items-center gap-2 text-xs md:text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Link>
+        </div>
+      </header>
+      {email && (
+        <div className="relative z-10 container mx-auto px-4 md:px-8 pb-8 pt-6 text-center">
+          <p className="text-xs md:text-sm font-bold uppercase tracking-[0.4em] text-primary">
+            You're almost in
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Setting up <span className="font-semibold text-foreground">{email}</span>
+          </p>
+        </div>
+      )}
+    </section>
+    <main className="container mx-auto px-4 md:px-8 py-10 md:py-14">{children}</main>
+  </div>
+);
+
+const StepIndicator = ({ step, path }: { step: Step; path: Path | null }) => {
+  const labels = path === "paid"
+    ? ["Start", "Password", "Plan", "Card"]
+    : ["Start", "Password", "Card"];
+  const currentIndex = (() => {
+    if (step === "welcome") return 0;
+    if (step === "password") return 1;
+    if (step === "plan") return 2;
+    if (step === "card") return path === "paid" ? 3 : 2;
+    return 0;
+  })();
+  return (
+    <ol className="max-w-3xl mx-auto mb-8 flex items-center gap-2 md:gap-4 text-xs md:text-sm">
+      {labels.map((label, idx) => {
+        const done = idx < currentIndex;
+        const active = idx === currentIndex;
+        return (
+          <li key={label} className="flex items-center gap-2 md:gap-3 flex-1">
+            <span
+              className={cn(
+                "grid place-items-center h-6 w-6 md:h-7 md:w-7 rounded-full text-[10px] md:text-xs font-bold shrink-0",
+                done
+                  ? "bg-primary text-primary-foreground"
+                  : active
+                    ? "bg-foreground text-background"
+                    : "bg-muted text-muted-foreground"
+              )}
+            >
+              {done ? <Check className="h-3.5 w-3.5" /> : idx + 1}
+            </span>
+            <span className={cn("truncate", active ? "font-semibold" : "text-muted-foreground")}>
+              {label}
+            </span>
+            {idx < labels.length - 1 && (
+              <span className="hidden md:block h-px flex-1 bg-border" />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+};
+
+// ----- Welcome ----------------------------------------------------------------
+
+const WelcomeStep = ({
+  email,
+  onFree,
+  onPaid,
+}: {
+  email: string | null;
+  onFree: () => void;
+  onPaid: () => void;
+}) => (
+  <div className="max-w-3xl mx-auto text-center space-y-8">
+    <div>
+      <h1 className="text-3xl md:text-5xl font-black tracking-tight">
+        Welcome to Bazinga{email ? "," : ""}
+      </h1>
+      {email && (
+        <p className="mt-1 text-base md:text-lg text-muted-foreground">{email}</p>
+      )}
+      <p className="mt-4 text-sm md:text-base text-muted-foreground">
+        Try everything for 7 days, or jump straight onto a plan. Both options need a card on file.
+      </p>
+    </div>
+
+    <div className="grid gap-4 md:grid-cols-2">
+      <button
+        type="button"
+        onClick={onFree}
+        className="group rounded-xl border-2 border-border bg-card p-6 text-left transition-all hover:border-foreground/40"
+      >
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-md bg-muted text-foreground grid place-items-center shrink-0">
+            <Rocket className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-lg font-black">Explore for Free</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              7 days of full Bazinga Unlimited access. Pick a plan before day 7 — we'll never charge without warning.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 flex items-center justify-between text-sm font-semibold">
+          <span>Start the 7-day trial</span>
+          <span aria-hidden>→</span>
+        </div>
+      </button>
+
+      <button
+        type="button"
+        onClick={onPaid}
+        className="group relative rounded-xl border-2 border-primary bg-primary/5 p-6 text-left transition-all hover:border-primary/80 shadow-[0_0_30px_hsl(0_82%_55%/0.18)]"
+      >
+        <span className="absolute -top-2.5 left-6 bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">
+          Recommended
+        </span>
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-md bg-primary text-primary-foreground grid place-items-center shrink-0">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-lg font-black">Join Now</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Pick the plan that fits — Comics, BazingaTV or Unlimited — and dive in immediately.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 flex items-center justify-between text-sm font-semibold text-primary">
+          <span>Choose your plan</span>
+          <span aria-hidden>→</span>
+        </div>
+      </button>
+    </div>
+  </div>
+);
+
+// ----- Password ---------------------------------------------------------------
+
+const PasswordStep = ({
+  password,
+  confirmPassword,
+  onPasswordChange,
+  onConfirmChange,
+  onContinue,
+  onBack,
+  path,
+}: {
+  password: string;
+  confirmPassword: string;
+  onPasswordChange: (v: string) => void;
+  onConfirmChange: (v: string) => void;
+  onContinue: (e: React.FormEvent) => void;
+  onBack: () => void;
+  path: Path;
+}) => (
+  <form onSubmit={onContinue} className="max-w-md mx-auto space-y-6">
+    <div>
+      <h2 className="text-2xl md:text-3xl font-black tracking-tight">Choose a password</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        You'll use this to sign back in to Bazinga.
+        {path === "free"
+          ? " After this we'll grab a card so the trial can roll into a plan."
+          : " Then you'll pick a plan and link a card."}
+      </p>
+    </div>
+
+    <div className="space-y-2">
+      <Label htmlFor="signup-password">Password</Label>
+      <div className="relative">
+        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          id="signup-password"
+          type="password"
+          value={password}
+          onChange={(e) => onPasswordChange(e.target.value)}
+          placeholder="At least 6 characters"
+          className="pl-9"
+          autoComplete="new-password"
+          required
+          minLength={6}
+        />
+      </div>
+    </div>
+
+    <div className="space-y-2">
+      <Label htmlFor="signup-confirm">Confirm password</Label>
+      <div className="relative">
+        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          id="signup-confirm"
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => onConfirmChange(e.target.value)}
+          placeholder="Repeat your password"
+          className="pl-9"
+          autoComplete="new-password"
+          required
+          minLength={6}
+        />
+      </div>
+    </div>
+
+    <div className="flex items-center justify-between gap-3 pt-2">
+      <Button type="button" variant="ghost" onClick={onBack} className="gap-2">
+        <ArrowLeft className="h-4 w-4" />
+        Back
+      </Button>
+      <Button type="submit" className="h-11 px-6 font-bold">
+        Continue
+      </Button>
+    </div>
+  </form>
+);
+
+// ----- Plan -------------------------------------------------------------------
+
+const planIcon: Record<SubscriptionPlanId, React.ComponentType<{ className?: string }>> = {
+  comics: BookOpen,
+  tv: Tv,
+  unlimited: Sparkles,
+};
+
+const PlanStep = ({
+  planId,
+  onSelect,
+  onContinue,
+  onBack,
+}: {
+  planId: SubscriptionPlanId;
+  onSelect: (id: SubscriptionPlanId) => void;
+  onContinue: () => void;
+  onBack: () => void;
+}) => (
+  <div className="max-w-5xl mx-auto space-y-8">
+    <div className="text-center">
+      <h2 className="text-2xl md:text-3xl font-black tracking-tight">Choose your universe</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Read the comics, stream the shows, or unlock everything with one Unlimited account.
+      </p>
+    </div>
+
+    <div className="grid gap-4 md:grid-cols-3">
+      {subscriptionPlans.map((plan) => (
+        <PlanCard
+          key={plan.id}
+          plan={plan}
+          selected={plan.id === planId}
+          onSelect={() => onSelect(plan.id)}
+        />
+      ))}
+    </div>
+
+    <div className="flex items-center justify-between gap-3 max-w-3xl mx-auto">
+      <Button type="button" variant="ghost" onClick={onBack} className="gap-2">
+        <ArrowLeft className="h-4 w-4" />
+        Back
+      </Button>
+      <Button onClick={onContinue} className="h-11 px-6 font-bold">
+        Continue to payment
+      </Button>
+    </div>
+
+    <p className="text-center text-xs text-muted-foreground">
+      Cancel anytime in your account. Taxes may apply.
+    </p>
+  </div>
+);
+
+const PlanCard = ({
+  plan,
+  selected,
+  onSelect,
+}: {
+  plan: SubscriptionPlan;
   selected: boolean;
   onSelect: () => void;
-}
-
-const PlanCard = ({ option, selected, onSelect }: PlanCardProps) => {
-  const Icon = option.icon;
+}) => {
+  const Icon = planIcon[plan.id];
   return (
     <button
       type="button"
@@ -494,24 +633,26 @@ const PlanCard = ({ option, selected, onSelect }: PlanCardProps) => {
       className={cn(
         "relative text-left rounded-xl border-2 p-5 flex flex-col gap-4 transition-all",
         selected
-          ? option.highlight
+          ? plan.accent === "gradient"
             ? "border-primary bg-primary/5 shadow-[0_0_30px_hsl(0_82%_55%/0.2)]"
-            : option.id === "unlimited"
+            : plan.accent === "orange"
               ? "border-orange-500 bg-orange-500/5"
-              : "border-foreground bg-foreground/5"
+              : "border-primary bg-primary/5"
           : "border-border bg-card hover:border-foreground/40"
       )}
     >
-      {option.badge && (
+      {plan.badge && (
         <span
           className={cn(
-            "absolute -top-2.5 left-5 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full",
-            option.id === "unlimited"
-              ? "bg-orange-500 text-black"
-              : "bg-primary text-primary-foreground"
+            "absolute -top-2.5 left-5 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full text-white",
+            plan.accent === "gradient"
+              ? "bg-gradient-to-r from-primary to-orange-500"
+              : plan.accent === "orange"
+                ? "bg-orange-500 text-black"
+                : "bg-primary"
           )}
         >
-          {option.badge}
+          {plan.badge}
         </span>
       )}
 
@@ -519,11 +660,11 @@ const PlanCard = ({ option, selected, onSelect }: PlanCardProps) => {
         <div
           className={cn(
             "h-10 w-10 rounded-md grid place-items-center shrink-0",
-            option.id === "unlimited"
+            plan.accent === "gradient"
               ? "bg-gradient-to-r from-primary to-orange-500 text-white"
-              : option.id === "premium"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground"
+              : plan.accent === "orange"
+                ? "bg-orange-500 text-black"
+                : "bg-primary text-primary-foreground"
           )}
         >
           <Icon className="h-5 w-5" />
@@ -532,7 +673,7 @@ const PlanCard = ({ option, selected, onSelect }: PlanCardProps) => {
           className={cn(
             "h-5 w-5 rounded-full border-2 mt-1 grid place-items-center shrink-0",
             selected
-              ? option.id === "unlimited"
+              ? plan.accent === "orange"
                 ? "border-orange-500 bg-orange-500"
                 : "border-primary bg-primary"
               : "border-muted-foreground/60"
@@ -543,21 +684,17 @@ const PlanCard = ({ option, selected, onSelect }: PlanCardProps) => {
       </div>
 
       <div>
-        <p className="text-lg font-black">{option.name}</p>
-        <p className="text-xs text-muted-foreground">{option.tagline}</p>
+        <p className="text-lg font-black">{plan.name}</p>
+        <p className="text-xs text-muted-foreground">{plan.tagline}</p>
       </div>
 
       <div className="flex items-baseline gap-1">
-        <span className="text-3xl font-black">
-          {option.monthly === 0 ? "€0" : `€${option.monthly.toFixed(2)}`}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          {option.monthly === 0 ? "forever" : "/ month"}
-        </span>
+        <span className="text-3xl font-black">${plan.monthly.toFixed(2)}</span>
+        <span className="text-xs text-muted-foreground">/ month</span>
       </div>
 
       <ul className="space-y-2 text-sm">
-        {option.benefits.map((benefit) => (
+        {plan.benefits.map((benefit) => (
           <li key={benefit} className="flex items-start gap-2">
             <Check className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
             <span className="text-foreground/85">{benefit}</span>
@@ -565,6 +702,195 @@ const PlanCard = ({ option, selected, onSelect }: PlanCardProps) => {
         ))}
       </ul>
     </button>
+  );
+};
+
+// ----- Card -------------------------------------------------------------------
+
+const CardStep = ({
+  path,
+  finalPlan,
+  billing,
+  billingLoading,
+  billingError,
+  submitting,
+  mockCard,
+  onMockChange,
+  onMockSubmit,
+  onStripeSuccess,
+  onBack,
+}: {
+  path: Path;
+  finalPlan: SignupPlan;
+  billing: BillingIntentResponse | null;
+  billingLoading: boolean;
+  billingError: string | null;
+  submitting: boolean;
+  mockCard: { name: string; number: string; expiry: string; cvc: string };
+  onMockChange: (card: { name: string; number: string; expiry: string; cvc: string }) => void;
+  onMockSubmit: (e: React.FormEvent) => void;
+  onStripeSuccess: (paymentMethodId: string) => Promise<void>;
+  onBack: () => void;
+}) => {
+  const summary = useMemo(() => {
+    if (finalPlan === "trial") {
+      return {
+        title: "7-day trial",
+        body: "Full Bazinga Unlimited access for 7 days. We'll only charge if you pick a plan before the trial ends.",
+        cta: "Start trial and finish sign-up",
+      };
+    }
+    const plan = subscriptionPlans.find((p) => p.id === finalPlan);
+    if (!plan) return { title: "Subscription", body: "", cta: "Finish sign-up" };
+    return {
+      title: `${plan.name} · $${plan.monthly.toFixed(2)}/month`,
+      body: plan.tagline,
+      cta:
+        plan.id === "unlimited"
+          ? "Unlock Unlimited and finish sign-up"
+          : `Start ${plan.name} and finish sign-up`,
+    };
+  }, [finalPlan]);
+
+  return (
+    <div className="max-w-3xl mx-auto grid gap-6 lg:grid-cols-[1fr_1.1fr]">
+      <aside className="space-y-4">
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">You're getting</p>
+          <p className="mt-1 text-lg font-black">{summary.title}</p>
+          <p className="text-sm text-muted-foreground mt-1">{summary.body}</p>
+        </div>
+
+        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-xs text-muted-foreground space-y-2">
+          <p className="font-semibold text-foreground">Why a card now?</p>
+          <p>
+            Even the free trial keeps a card on file so we can roll into a plan automatically.
+            We'll always email before the first charge.
+          </p>
+        </div>
+
+        <Button variant="ghost" onClick={onBack} className="gap-2 w-full justify-start">
+          <ArrowLeft className="h-4 w-4" />
+          Back to {path === "paid" ? "plan" : "password"}
+        </Button>
+      </aside>
+
+      <div className="space-y-4">
+        {billingLoading && (
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Preparing secure payment…
+          </div>
+        )}
+        {billingError && (
+          <p className="text-sm text-destructive" role="alert">
+            {billingError}
+          </p>
+        )}
+        {billing && billing.stripeConfigured && billing.publishableKey && billing.clientSecret ? (
+          <StripeCardForm
+            publishableKey={billing.publishableKey}
+            clientSecret={billing.clientSecret}
+            submitting={submitting}
+            submitLabel={summary.cta}
+            onSubmit={(paymentMethodId) => onStripeSuccess(paymentMethodId)}
+          />
+        ) : billing && !billing.stripeConfigured ? (
+          <form onSubmit={onMockSubmit} className="space-y-4">
+            <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <CreditCard className="h-4 w-4 text-primary" />
+                Card details
+              </div>
+              <div className="grid gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="card-name">Name on card</Label>
+                  <Input
+                    id="card-name"
+                    value={mockCard.name}
+                    onChange={(e) => onMockChange({ ...mockCard, name: e.target.value })}
+                    placeholder="Roman Bazinga"
+                    autoComplete="cc-name"
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="card-number">Card number</Label>
+                  <Input
+                    id="card-number"
+                    value={mockCard.number}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "").slice(0, 16);
+                      const groups = digits.match(/.{1,4}/g);
+                      onMockChange({ ...mockCard, number: groups ? groups.join(" ") : "" });
+                    }}
+                    placeholder="1234 5678 9012 3456"
+                    inputMode="numeric"
+                    autoComplete="cc-number"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="card-expiry">Expiry</Label>
+                    <Input
+                      id="card-expiry"
+                      value={mockCard.expiry}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                        const formatted =
+                          digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+                        onMockChange({ ...mockCard, expiry: formatted });
+                      }}
+                      placeholder="MM/YY"
+                      inputMode="numeric"
+                      autoComplete="cc-exp"
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="card-cvc">CVC</Label>
+                    <Input
+                      id="card-cvc"
+                      value={mockCard.cvc}
+                      onChange={(e) =>
+                        onMockChange({
+                          ...mockCard,
+                          cvc: e.target.value.replace(/\D/g, "").slice(0, 4),
+                        })
+                      }
+                      placeholder="123"
+                      inputMode="numeric"
+                      autoComplete="cc-csc"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Stripe isn't configured on this environment — using a mock form. Set
+                STRIPE_SECRET_KEY + STRIPE_PUBLISHABLE_KEY for the real Stripe Elements form.
+              </p>
+            </div>
+
+            <Button type="submit" disabled={submitting} className="w-full h-12 text-base font-bold">
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Finishing sign-up…
+                </>
+              ) : (
+                summary.cta
+              )}
+            </Button>
+          </form>
+        ) : null}
+
+        <p className="text-[11px] text-muted-foreground text-center">
+          By continuing you agree to the Bazinga Terms of Use and Privacy Policy.
+        </p>
+      </div>
+    </div>
   );
 };
 

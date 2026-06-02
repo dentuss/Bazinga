@@ -9,6 +9,7 @@ import {
   updateProfile as apiUpdateProfile,
 } from "@/lib/profiles";
 import type { SignupPlan } from "@/lib/signup";
+import { isPaidSubscription, isTrialExpired } from "@/data/subscriptionPlans";
 
 type AuthUser = {
   id: number;
@@ -47,9 +48,16 @@ type AuthContextType = {
   profiles: Profile[];
   currentProfile: Profile | null;
   profilesLoading: boolean;
+  hasPaidSubscription: boolean;
+  trialExpired: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
-  completeSignup: (token: string, password: string, plan: SignupPlan) => Promise<void>;
+  completeSignup: (
+    token: string,
+    password: string,
+    plan: SignupPlan,
+    paymentMethodId?: string | null
+  ) => Promise<void>;
   updateUser: (updates: Partial<AuthUser>) => void;
   logout: () => void;
   refreshProfiles: () => Promise<void>;
@@ -160,10 +168,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     handleAuth(response.token, response);
   };
 
-  const completeSignup = async (token: string, password: string, plan: SignupPlan) => {
+  const completeSignup = async (
+    token: string,
+    password: string,
+    plan: SignupPlan,
+    paymentMethodId?: string | null
+  ) => {
     const response = await apiFetch<AuthApiResponse>("/api/auth/signup/complete", {
       method: "POST",
-      body: JSON.stringify({ token, password, plan }),
+      body: JSON.stringify({ token, password, plan, paymentMethodId }),
     });
     handleAuth(response.token, response);
   };
@@ -207,6 +220,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         profiles,
         currentProfile,
         profilesLoading,
+        hasPaidSubscription: isPaidSubscription(user?.subscriptionType),
+        trialExpired: isTrialExpired(user?.subscriptionType, user?.subscriptionExpiration),
         login,
         register,
         completeSignup,
