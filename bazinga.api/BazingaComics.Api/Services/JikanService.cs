@@ -26,13 +26,13 @@ public class JikanService : IJikanService
     // ---------- Anime ------------------------------------------------------
 
     public Task<JikanPagedResponse<AnimeDto>> TopAnimeAsync(int page, int limit, CancellationToken ct) =>
-        GetPagedCached($"top/anime?page={page}&limit={limit}", ListCacheTtl, MapAnime, ct);
+        GetPagedCached<JikanAnime, AnimeDto>($"top/anime?page={page}&limit={limit}", ListCacheTtl, MapAnime, ct);
 
     public Task<JikanPagedResponse<AnimeDto>> SeasonNowAsync(int page, int limit, CancellationToken ct) =>
-        GetPagedCached($"seasons/now?page={page}&limit={limit}", ListCacheTtl, MapAnime, ct);
+        GetPagedCached<JikanAnime, AnimeDto>($"seasons/now?page={page}&limit={limit}", ListCacheTtl, MapAnime, ct);
 
     public Task<JikanPagedResponse<AnimeDto>> SeasonUpcomingAsync(int page, int limit, CancellationToken ct) =>
-        GetPagedCached($"seasons/upcoming?page={page}&limit={limit}", ListCacheTtl, MapAnime, ct);
+        GetPagedCached<JikanAnime, AnimeDto>($"seasons/upcoming?page={page}&limit={limit}", ListCacheTtl, MapAnime, ct);
 
     public Task<JikanPagedResponse<AnimeDto>> SearchAnimeAsync(
         string? query, int page, int limit,
@@ -50,7 +50,7 @@ public class JikanService : IJikanService
             if (!string.IsNullOrWhiteSpace(orderBy)) q["order_by"] = orderBy;
             q["sfw"] = "true";
         });
-        return GetPagedCached(url, ListCacheTtl, MapAnime, ct);
+        return GetPagedCached<JikanAnime, AnimeDto>(url, ListCacheTtl, MapAnime, ct);
     }
 
     public async Task<AnimeDto?> AnimeDetailAsync(long id, CancellationToken ct)
@@ -69,7 +69,7 @@ public class JikanService : IJikanService
     // ---------- Manga ------------------------------------------------------
 
     public Task<JikanPagedResponse<MangaDto>> TopMangaAsync(int page, int limit, CancellationToken ct) =>
-        GetPagedCached($"top/manga?page={page}&limit={limit}", ListCacheTtl, MapManga, ct);
+        GetPagedCached<JikanManga, MangaDto>($"top/manga?page={page}&limit={limit}", ListCacheTtl, MapManga, ct);
 
     public Task<JikanPagedResponse<MangaDto>> SearchMangaAsync(
         string? query, int page, int limit,
@@ -86,7 +86,7 @@ public class JikanService : IJikanService
             if (!string.IsNullOrWhiteSpace(orderBy)) q["order_by"] = orderBy;
             q["sfw"] = "true";
         });
-        return GetPagedCached(url, ListCacheTtl, MapManga, ct);
+        return GetPagedCached<JikanManga, MangaDto>(url, ListCacheTtl, MapManga, ct);
     }
 
     public async Task<MangaDto?> MangaDetailAsync(long id, CancellationToken ct)
