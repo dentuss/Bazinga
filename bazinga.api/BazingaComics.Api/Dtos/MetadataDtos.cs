@@ -59,3 +59,62 @@ public class GenreDto
     public string Name { get; set; } = string.Empty;
     public int? Count { get; set; }
 }
+
+// ---- Superheroes (akabab/superhero-api) -------------------------------------
+
+public class SuperheroImagesDto
+{
+    public string? Xs { get; set; }
+    public string? Sm { get; set; }
+    public string? Md { get; set; }
+    public string? Lg { get; set; }
+}
+
+public class SuperheroPowerstatsDto
+{
+    public int Intelligence { get; set; }
+    public int Strength { get; set; }
+    public int Speed { get; set; }
+    public int Durability { get; set; }
+    public int Power { get; set; }
+    public int Combat { get; set; }
+}
+
+public class SuperheroDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public string? FullName { get; set; }
+    public string? Publisher { get; set; }
+    public string? Alignment { get; set; }
+    public string? Race { get; set; }
+    public string? Gender { get; set; }
+    public string? Occupation { get; set; }
+    public string? GroupAffiliation { get; set; }
+    public string? PlaceOfBirth { get; set; }
+    public List<string> Aliases { get; set; } = new();
+    public SuperheroImagesDto Images { get; set; } = new();
+    public SuperheroPowerstatsDto Powerstats { get; set; } = new();
+}
+
+// ---- Superhero TV shows (TVMaze) --------------------------------------------
+
+public class SuperheroShowDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Type { get; set; }
+    public string? Language { get; set; }
+    public List<string> Genres { get; set; } = new();
+    public string? Status { get; set; }
+    public int? Runtime { get; set; }
+    public string? Premiered { get; set; }
+    public string? Ended { get; set; }
+    public string? Summary { get; set; }
+    public string? ImageMedium { get; set; }
+    public string? ImageOriginal { get; set; }
+    public string? NetworkName { get; set; }
+    public string? OfficialSite { get; set; }
+    public double? Rating { get; set; }
+}

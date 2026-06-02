@@ -9,9 +9,15 @@ namespace BazingaComics.Api.Controllers;
 public class MetadataController : ControllerBase
 {
     private const int MaxLimit = 25;
+    private const int MaxSuperheroLimit = 48;
     private readonly IJikanService _jikan;
+    private readonly ISuperheroService _supers;
 
-    public MetadataController(IJikanService jikan) => _jikan = jikan;
+    public MetadataController(IJikanService jikan, ISuperheroService supers)
+    {
+        _jikan = jikan;
+        _supers = supers;
+    }
 
     // ---------- Anime ----------------------------------------------------
 
@@ -87,6 +93,48 @@ public class MetadataController : ControllerBase
 
     [HttpGet("manga/genres")]
     public Task<List<GenreDto>> MangaGenres(CancellationToken ct) => _jikan.MangaGenresAsync(ct);
+
+    // ---------- Superheroes (akabab) -------------------------------------
+
+    [HttpGet("superheroes")]
+    public Task<JikanPagedResponse<SuperheroDto>> Superheroes(
+        [FromQuery] int page = 1,
+        [FromQuery] int limit = 24,
+        [FromQuery] string? q = null,
+        [FromQuery] string? publisher = null,
+        [FromQuery] string? alignment = null,
+        CancellationToken ct = default)
+        => _supers.ListAsync(Math.Max(1, page), Math.Clamp(limit, 1, MaxSuperheroLimit), q, publisher, alignment, ct);
+
+    [HttpGet("superheroes/publishers")]
+    public Task<List<string>> SuperheroPublishers(CancellationToken ct)
+        => _supers.GetPublishersAsync(ct);
+
+    [HttpGet("superheroes/{id:int}")]
+    public async Task<ActionResult<SuperheroDto>> Superhero(int id, CancellationToken ct)
+    {
+        var dto = await _supers.GetByIdAsync(id, ct);
+        return dto is null ? NotFound() : Ok(dto);
+    }
+
+    // ---------- Superhero shows (TVMaze) ---------------------------------
+
+    [HttpGet("superhero-shows")]
+    public Task<List<SuperheroShowDto>> SuperheroShows(CancellationToken ct)
+        => _supers.GetCuratedShowsAsync(ct);
+
+    [HttpGet("superhero-shows/search")]
+    public Task<List<SuperheroShowDto>> SearchSuperheroShows(
+        [FromQuery] string q,
+        CancellationToken ct)
+        => _supers.SearchShowsAsync(q, ct);
+
+    [HttpGet("superhero-shows/{id:int}")]
+    public async Task<ActionResult<SuperheroShowDto>> SuperheroShow(int id, CancellationToken ct)
+    {
+        var dto = await _supers.GetShowByIdAsync(id, ct);
+        return dto is null ? NotFound() : Ok(dto);
+    }
 
     private static int Clamp(int limit) => Math.Clamp(limit, 1, MaxLimit);
 }

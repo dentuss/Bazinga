@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import SiteHeader, { type SiteHeaderNavItem } from "@/components/SiteHeader";
 import TVHero from "@/components/TVHero";
+import SuperheroShowsSection from "@/components/SuperheroShowsSection";
 import {
   fetchAnime,
   fetchAnimeGenres,
@@ -801,6 +802,7 @@ const BazingaTV = () => {
           onSelect={(s) => setSelectedShow(s)}
           loading={animeOriginals.isLoading}
         />
+        <SuperheroShowsSection />
         <ShowRow
           title={activeGenre ? "Anime Universe · Filtered" : "Anime Universe"}
           items={filteredAnime.data?.data ?? []}

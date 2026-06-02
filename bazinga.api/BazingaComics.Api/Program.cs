@@ -125,6 +125,15 @@ builder.Services.AddHttpClient<IJikanService, JikanService>(client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("BazingaComics/1.0 (+https://bazinga.local)");
 });
 
+// Superhero metadata: akabab/superhero-api (characters, static JSON) and
+// TVMaze (shows). Both are free, no-auth; results are cached for hours so
+// each upstream is hit at most a handful of times per day.
+builder.Services.AddHttpClient<ISuperheroService, SuperheroService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("BazingaComics/1.0 (+https://bazinga.local)");
+});
+
 // Controllers + JSON
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
