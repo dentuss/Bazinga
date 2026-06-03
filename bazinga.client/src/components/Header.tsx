@@ -3,7 +3,8 @@ import SiteHeader, { type SiteHeaderNavItem } from "@/components/SiteHeader";
 const navItems: SiteHeaderNavItem[] = [
   { label: "News", to: "/news" },
   { label: "Comics", to: "/comics" },
-  { label: "Manga", to: "/under-construction" },
+  { label: "Characters", to: "/characters" },
+  { label: "Manga", to: "/comics#manga" },
   { label: "Library", to: "/library", tone: "red" },
   { label: "TV", to: "/bazinga-tv", tone: "orange", emphasize: true },
 ];

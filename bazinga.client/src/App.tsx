@@ -28,6 +28,11 @@ import ProfileEditor from "./pages/ProfileEditor";
 import SignUpReview from "./pages/SignUpReview";
 import SignUpCheckEmail from "./pages/SignUpCheckEmail";
 import SignUpComplete from "./pages/SignUpComplete";
+import Characters from "./pages/Characters";
+import AboutBazinga from "./pages/AboutBazinga";
+import Faqs from "./pages/Faqs";
+import Careers from "./pages/Careers";
+import Internships from "./pages/Internships";
 
 const queryClient = new QueryClient();
 
@@ -114,6 +119,14 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="/characters"
+                  element={
+                    <RequireProfile>
+                      <Characters />
+                    </RequireProfile>
+                  }
+                />
+                <Route
                   path="/bazinga-tv"
                   element={
                     <RequireProfile>
@@ -173,6 +186,10 @@ const App = () => (
 
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/news" element={<News />} />
+                <Route path="/about-bazinga" element={<AboutBazinga />} />
+                <Route path="/faqs" element={<Faqs />} />
+                <Route path="/careers" element={<Careers />} />
+                <Route path="/internships" element={<Internships />} />
                 <Route path="/bazinga-unlimited" element={<BazingaUnlimited />} />
                 <Route path="/under-construction" element={<UnderConstruction />} />
 

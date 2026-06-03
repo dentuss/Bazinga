@@ -6,7 +6,6 @@ interface Comic {
   image: string;
   title: string;
   creators?: string;
-  comicType?: string;
 }
 
 interface ComicSectionProps {

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
   Heart,
   Loader2,
-  Search,
   Shield,
   Sparkles,
   Sword,
@@ -23,20 +23,15 @@ import { cn } from "@/lib/utils";
 const PUBLISHER_PRESETS = ["Marvel Comics", "DC Comics", "Dark Horse Comics", "Image Comics"];
 
 const SuperheroesSection = () => {
+  const [searchParams] = useSearchParams();
+  const masterQuery = (searchParams.get("q") ?? "").trim();
   const [publisher, setPublisher] = useState<string | null>("Marvel Comics");
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<SuperheroDto | null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
-    return () => clearTimeout(t);
-  }, [query]);
-
-  useEffect(() => {
     setPage(1);
-  }, [publisher, debouncedQuery]);
+  }, [publisher, masterQuery]);
 
   const publishersQuery = useQuery({
     queryKey: ["superhero-publishers"],
@@ -45,11 +40,11 @@ const SuperheroesSection = () => {
   });
 
   const heroesQuery = useQuery({
-    queryKey: ["superheroes", publisher ?? "all", debouncedQuery, page],
+    queryKey: ["superheroes", publisher ?? "all", masterQuery, page],
     queryFn: () =>
       fetchSuperheroes({
         publisher: publisher ?? undefined,
-        q: debouncedQuery || undefined,
+        q: masterQuery || undefined,
         page,
         limit: 18,
       }),
@@ -69,29 +64,18 @@ const SuperheroesSection = () => {
 
   return (
     <section id="superheroes" className="container mx-auto px-4 md:px-8 py-12 md:py-16">
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
-        <div>
-          <p className="text-xs md:text-sm font-bold uppercase tracking-[0.3em] text-primary">
-            Superhero Universe
-          </p>
-          <h2 className="mt-2 text-2xl md:text-4xl font-black tracking-tight">
-            Heroes &amp; Villains
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground max-w-2xl">
-            Browse {pagination?.totalItems ?? "thousands of"} characters from every comic
-            multiverse — Marvel, DC, Dark Horse and more.
-          </p>
-        </div>
-        <div className="relative w-full md:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name…"
-            className="w-full rounded-md border border-border bg-background pl-9 pr-3 h-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 transition-colors"
-          />
-        </div>
+      <div className="mb-6">
+        <p className="text-xs md:text-sm font-bold uppercase tracking-[0.3em] text-primary">
+          Superhero Universe
+        </p>
+        <h2 className="mt-2 text-2xl md:text-4xl font-black tracking-tight">
+          Heroes &amp; Villains
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground max-w-2xl">
+          {masterQuery
+            ? `Showing characters matching "${masterQuery}".`
+            : `Browse ${pagination?.totalItems ?? "thousands of"} characters from every comic multiverse — Marvel, DC, Dark Horse and more.`}
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-6">
