@@ -4,14 +4,12 @@ import { cn } from "@/lib/utils";
 interface BrowseByFilterProps {
   onFilterChange?: (type: string, value: string) => void;
   seriesOptions: string[];
-  characterOptions: string[];
   creatorOptions: string[];
 }
 
 const BrowseByFilter = ({
   onFilterChange,
   seriesOptions,
-  characterOptions,
   creatorOptions,
 }: BrowseByFilterProps) => {
   const [activeTab, setActiveTab] = useState("series");
@@ -19,7 +17,6 @@ const BrowseByFilter = ({
 
   const tabs = [
     { id: "series", label: "SERIES" },
-    { id: "character", label: "CHARACTER" },
     { id: "creator", label: "CREATOR" },
   ];
 
@@ -27,8 +24,6 @@ const BrowseByFilter = ({
     switch (activeTab) {
       case "series":
         return seriesOptions;
-      case "character":
-        return characterOptions;
       case "creator":
         return creatorOptions;
       default:

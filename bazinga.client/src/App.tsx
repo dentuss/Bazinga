@@ -29,6 +29,8 @@ import SignUpReview from "./pages/SignUpReview";
 import SignUpCheckEmail from "./pages/SignUpCheckEmail";
 import SignUpComplete from "./pages/SignUpComplete";
 import Characters from "./pages/Characters";
+import AllComics from "./pages/AllComics";
+import AllManga from "./pages/AllManga";
 import AboutBazinga from "./pages/AboutBazinga";
 import Faqs from "./pages/Faqs";
 import Careers from "./pages/Careers";
@@ -123,6 +125,22 @@ const App = () => (
                   element={
                     <RequireProfile>
                       <Characters />
+                    </RequireProfile>
+                  }
+                />
+                <Route
+                  path="/comics/all"
+                  element={
+                    <RequireProfile>
+                      <AllComics />
+                    </RequireProfile>
+                  }
+                />
+                <Route
+                  path="/manga"
+                  element={
+                    <RequireProfile>
+                      <AllManga />
                     </RequireProfile>
                   }
                 />
