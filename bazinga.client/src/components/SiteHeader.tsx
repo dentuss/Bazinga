@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import MasterSearch from "@/components/MasterSearch";
 import {
   Check,
   HelpCircle,
@@ -70,6 +71,19 @@ const SiteHeader = ({
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Cmd/Ctrl+K opens the master search anywhere in the app.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const accentClass =
     brand.accentColor === "orange" ? "text-orange-500" : "text-primary";
@@ -177,7 +191,13 @@ const SiteHeader = ({
         </div>
 
         <div className="flex items-center gap-2 md:gap-3">
-          <Button variant="ghost" size="icon" aria-label="Search" className="hidden sm:flex">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Search"
+            className="hidden sm:flex"
+            onClick={() => setSearchOpen(true)}
+          >
             <Search className="h-5 w-5" />
           </Button>
           {!hasPaidSubscription && (
@@ -439,6 +459,7 @@ const SiteHeader = ({
           </div>
         </div>
       )}
+      <MasterSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );
 };
