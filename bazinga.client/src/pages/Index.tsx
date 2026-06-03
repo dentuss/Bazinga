@@ -12,9 +12,7 @@ import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { fetchTopManga } from "@/lib/metadata";
 import {
-  placeholderCharacters,
   placeholderComics,
-  placeholderCreators,
   type PlaceholderComic,
 } from "@/data/placeholderComics";
 
@@ -42,6 +40,9 @@ interface DisplayComic {
   createdAt?: string;
 }
 
+const HOME_COMIC_LIMIT = 18; // three rows on the comics section
+const NEW_THIS_WEEK_TOTAL = 6;
+
 const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedComic, setSelectedComic] = useState<DisplayComic | null>(null);
@@ -56,15 +57,14 @@ const Index = () => {
     queryFn: () => apiFetch<ComicDto[]>("/api/comics"),
   });
 
+  // Tease the top manga so we can mix titles into New This Week without going
+  // to the full Manga Universe section.
   const topManga = useQuery({
-    queryKey: ["manga-top", "creators"],
-    queryFn: () => fetchTopManga(1, 24),
+    queryKey: ["manga-top", "home-mix"],
+    queryFn: () => fetchTopManga(1, 12),
     staleTime: 30 * 60 * 1000,
   });
 
-  // Comics from the DB get mapped to the same display shape as our placeholders.
-  // If the DB returns nothing (fresh install / empty seed), we fall back to a
-  // curated set of placeholders so the homepage is never empty.
   const dbComics = useMemo<DisplayComic[]>(
     () =>
       comics.map((c) => ({
@@ -102,31 +102,20 @@ const Index = () => {
       Array.from(new Set(arr.filter((v) => v.trim().length > 0))).sort((a, b) =>
         a.localeCompare(b, undefined, { sensitivity: "base" })
       );
-    const creatorsFromManga = (topManga.data?.data ?? [])
-      .flatMap((m) => m.authors)
-      .map((a) => a.replace(/,\s+/g, " "));
+    // Creators come from the comics we can actually filter on (placeholder + DB),
+    // not from the manga API — that mismatch is why the filter previously yielded
+    // 0 results when a manga author chip was clicked.
     const creatorsFromComics = allComics.flatMap((c) =>
       c.creators.split(",").map((s) => s.trim())
     );
     return {
       series: ["All Series", ...sorted(allComics.map((c) => c.series))],
-      character: [
-        "All Characters",
-        ...sorted([
-          ...allComics.map((c) => c.character),
-          ...placeholderCharacters,
-        ]),
-      ],
-      creator: [
-        "All Creators",
-        ...sorted([...creatorsFromComics, ...creatorsFromManga, ...placeholderCreators]),
-      ],
+      creator: ["All Creators", ...sorted(creatorsFromComics)],
     };
-  }, [allComics, topManga.data]);
+  }, [allComics]);
 
   const searchQuery = searchParams.get("search") || "";
-  const viewParam = searchParams.get("view");
-  const viewAll = viewParam === "all";
+  const viewAll = searchParams.get("view") === "all";
 
   const filteredComics = useMemo(() => {
     let list = [...allComics];
@@ -143,7 +132,6 @@ const Index = () => {
     if (browseFilter.value && !browseFilter.value.startsWith("All")) {
       list = list.filter((c) => {
         if (browseFilter.type === "series") return c.series === browseFilter.value;
-        if (browseFilter.type === "character") return c.character === browseFilter.value;
         if (browseFilter.type === "creator")
           return c.creators.toLowerCase().includes(browseFilter.value.toLowerCase());
         return true;
@@ -152,20 +140,46 @@ const Index = () => {
     return list;
   }, [searchQuery, browseFilter, allComics]);
 
-  const newThisWeek = useMemo(
-    () =>
-      [...allComics]
-        .sort(
-          (a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
-        )
-        .slice(0, 6),
+  /** "New This Week" = newest 3 comics + 3 newest top manga titles, mixed. */
+  const newThisWeek = useMemo(() => {
+    const sortedComics = [...allComics]
+      .sort(
+        (a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
+      )
+      .slice(0, Math.ceil(NEW_THIS_WEEK_TOTAL / 2))
+      .map((c) => ({
+        image: c.image,
+        title: c.title,
+        creators: c.creators,
+      }));
+    const mangaSlice = (topManga.data?.data ?? [])
+      .slice(0, Math.floor(NEW_THIS_WEEK_TOTAL / 2))
+      .map((m) => ({
+        image: m.largeImageUrl ?? m.imageUrl ?? "",
+        title: m.title,
+        creators: m.authors.join(", "),
+      }));
+    // Interleave so it doesn't look segregated.
+    const out: { image: string; title: string; creators?: string }[] = [];
+    const max = Math.max(sortedComics.length, mangaSlice.length);
+    for (let i = 0; i < max; i++) {
+      if (sortedComics[i]) out.push(sortedComics[i]);
+      if (mangaSlice[i]) out.push(mangaSlice[i]);
+    }
+    return out.slice(0, NEW_THIS_WEEK_TOTAL);
+  }, [allComics, topManga.data]);
+
+  const homeComics = useMemo(
+    () => allComics.slice(0, HOME_COMIC_LIMIT),
     [allComics]
   );
 
   const isFiltered = Boolean(searchQuery) || Boolean(browseFilter.value) || viewAll;
 
-  const handleComicClick = (comic: DisplayComic) => {
-    setSelectedComic(comic);
+  const handleComicClick = (comic: { image: string; title: string; creators?: string }) => {
+    const match = allComics.find((c) => c.title === comic.title);
+    if (!match) return; // mixed-in manga or non-comic — modal is comic-only
+    setSelectedComic(match);
     setIsModalOpen(true);
   };
 
@@ -178,12 +192,13 @@ const Index = () => {
     setBrowseFilter({ type: "", value: "" });
   };
 
-  // Pre-load the comic shape ComicModal expects (it still uses the legacy fields).
   const modalComic = selectedComic
     ? {
-        ...selectedComic,
-        author: selectedComic.creators,
-        mainCharacter: selectedComic.character,
+        id: selectedComic.id,
+        title: selectedComic.title,
+        image: selectedComic.image,
+        creators: selectedComic.creators,
+        description: selectedComic.description,
       }
     : null;
 
@@ -197,7 +212,6 @@ const Index = () => {
         <BrowseByFilter
           onFilterChange={handleBrowseFilterChange}
           seriesOptions={browseOptions.series}
-          characterOptions={browseOptions.character}
           creatorOptions={browseOptions.creator}
         />
 
@@ -208,7 +222,7 @@ const Index = () => {
                 {searchQuery
                   ? `SEARCH RESULTS FOR "${searchQuery.toUpperCase()}"`
                   : viewAll
-                    ? "ALL COMICS"
+                    ? "COMICS"
                     : "FILTERED RESULTS"}
                 <span className="text-muted-foreground text-lg font-normal ml-2">
                   ({filteredComics.length} comics)
@@ -223,10 +237,13 @@ const Index = () => {
                 <button
                   key={comic.id}
                   type="button"
-                  onClick={() => handleComicClick(comic)}
+                  onClick={() => {
+                    setSelectedComic(comic);
+                    setIsModalOpen(true);
+                  }}
                   className="group block text-left outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-md"
                 >
-                  <div className="relative aspect-[2/3] overflow-hidden rounded-md shadow-lg transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-primary/20">
+                  <div className="relative aspect-[2/3] overflow-hidden rounded-md shadow-lg transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-primary/30">
                     <img
                       src={comic.image}
                       alt={comic.title}
@@ -263,13 +280,13 @@ const Index = () => {
               onComicClick={handleComicClick}
             />
             <ComicSection
-              id="all-comics"
-              title="ALL COMICS"
-              comics={allComics}
-              viewAllHref="/comics?view=all"
+              id="comics"
+              title="COMICS"
+              comics={homeComics}
+              viewAllHref="/comics/all"
               onComicClick={handleComicClick}
             />
-            <MangaUniverse />
+            <MangaUniverse mode="home" viewAllHref="/manga" />
           </>
         )}
       </main>

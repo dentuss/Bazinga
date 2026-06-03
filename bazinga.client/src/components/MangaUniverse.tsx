@@ -12,7 +12,8 @@ import {
 } from "@/lib/metadata";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 12; // two rows × six cards on lg
+const FULL_PAGE_SIZE = 18; // three rows × six cards on lg+
+const HOME_LIMIT = 18; // three rows on the home preview
 
 const MangaCard = ({
   manga,
@@ -135,7 +136,7 @@ const MangaModal = ({
             </div>
             <div className="flex flex-wrap gap-3 pt-2">
               <Button className="bg-primary text-primary-foreground hover:bg-primary/90 transition-transform hover:scale-[1.03]">
-                <BookOpen className="h-4 w-4" /> Read sample
+                <BookOpen className="h-4 w-4" /> Read Now
               </Button>
               <Button variant="outline">Add to wishlist</Button>
             </div>
@@ -158,12 +159,19 @@ const MangaModal = ({
   );
 };
 
-const MangaUniverse = () => {
+interface MangaUniverseProps {
+  /** "home" = 18-card preview with "See all" link, no pagination/chips. */
+  mode?: "home" | "full";
+  viewAllHref?: string;
+}
+
+const MangaUniverse = ({ mode = "full", viewAllHref }: MangaUniverseProps = {}) => {
   const [searchParams] = useSearchParams();
   const masterQuery = (searchParams.get("q") ?? "").trim();
   const [selected, setSelected] = useState<MangaDto | null>(null);
   const [activeGenre, setActiveGenre] = useState<number | null>(null);
   const [page, setPage] = useState(1);
+  const isHome = mode === "home";
 
   useEffect(() => {
     setPage(1);
@@ -173,17 +181,18 @@ const MangaUniverse = () => {
     queryKey: ["manga-genres"],
     queryFn: fetchMangaGenres,
     staleTime: 24 * 60 * 60 * 1000,
+    enabled: !isHome,
   });
 
   const list = useQuery({
-    queryKey: ["manga-grid", activeGenre ?? "all", masterQuery || "", page],
+    queryKey: ["manga-grid", isHome ? "home" : "full", activeGenre ?? "all", masterQuery || "", isHome ? 1 : page],
     queryFn: () =>
       searchManga({
-        q: masterQuery.length > 1 ? masterQuery : undefined,
-        genre: activeGenre ?? undefined,
-        orderBy: masterQuery ? undefined : "score",
-        page,
-        limit: PAGE_SIZE,
+        q: !isHome && masterQuery.length > 1 ? masterQuery : undefined,
+        genre: !isHome ? activeGenre ?? undefined : undefined,
+        orderBy: isHome || !masterQuery ? "score" : undefined,
+        page: isHome ? 1 : page,
+        limit: isHome ? HOME_LIMIT : FULL_PAGE_SIZE,
       }),
     placeholderData: keepPreviousData,
     staleTime: 5 * 60 * 1000,
@@ -221,21 +230,34 @@ const MangaUniverse = () => {
 
   return (
     <section id="manga" className="container mx-auto px-4 md:px-8 py-12 md:py-16">
-      <div className="mb-6">
-        <p className="text-xs md:text-sm font-bold uppercase tracking-[0.3em] text-primary">
-          Discover
-        </p>
-        <h2 className="text-2xl md:text-4xl font-black tracking-tight mt-2">
-          Manga Universe
-        </h2>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          {masterQuery
-            ? `Manga matching "${masterQuery}", sourced live from MyAnimeList.`
-            : "Covers, scores, synopsis. Sourced live from MyAnimeList."}
-        </p>
+      <div className={isHome ? "flex items-center justify-between mb-6" : "mb-6"}>
+        <div>
+          <p className="text-xs md:text-sm font-bold uppercase tracking-[0.3em] text-primary">
+            {isHome ? "Manga" : "Discover"}
+          </p>
+          <h2 className="text-2xl md:text-4xl font-black tracking-tight mt-2">
+            {isHome ? "MANGA" : "Manga Universe"}
+          </h2>
+          {!isHome && (
+            <p className="text-sm text-muted-foreground max-w-2xl">
+              {masterQuery
+                ? `Manga matching "${masterQuery}", sourced live from MyAnimeList.`
+                : "Covers, scores, synopsis. Sourced live from MyAnimeList."}
+            </p>
+          )}
+        </div>
+        {isHome && viewAllHref && (
+          <a
+            href={viewAllHref}
+            className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 transition-colors group"
+          >
+            SEE ALL
+            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </a>
+        )}
       </div>
 
-      {curatedGenres.length > 0 && (
+      {!isHome && curatedGenres.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-6">
           <GenreChip
             label="Top picks"
@@ -279,7 +301,7 @@ const MangaUniverse = () => {
         )}
       </div>
 
-      {pagination && pagination.lastVisiblePage > 1 && (
+      {!isHome && pagination && pagination.lastVisiblePage > 1 && (
         <div className="mt-8 flex items-center justify-center gap-3">
           <PagerButton
             disabled={page <= 1}
