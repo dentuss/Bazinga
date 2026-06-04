@@ -35,13 +35,30 @@ import AboutBazinga from "./pages/AboutBazinga";
 import Faqs from "./pages/Faqs";
 import Careers from "./pages/Careers";
 import Internships from "./pages/Internships";
+import ScrollToTop from "./components/ScrollToTop";
 
 const queryClient = new QueryClient();
 
+/** True when the user landed with a stored profile id but the fetch hasn't returned yet. */
+const usingStoredProfile = (profiles: { id: number }[], profilesLoading: boolean) => {
+  if (profiles.length > 0) return false;
+  if (!profilesLoading) return false;
+  return Boolean(sessionStorage.getItem("current_profile_id"));
+};
+
+const ProfilesLoading = () => (
+  <div className="min-h-screen bg-background grid place-items-center text-muted-foreground text-sm">
+    Loading your profile…
+  </div>
+);
+
 const RootGate = () => {
-  const { user, currentProfile, trialExpired } = useAuth();
+  const { user, currentProfile, trialExpired, profiles, profilesLoading } = useAuth();
   if (!user) return <Landing />;
-  if (!currentProfile) return <Navigate to="/profiles" replace />;
+  if (!currentProfile) {
+    if (usingStoredProfile(profiles, profilesLoading)) return <ProfilesLoading />;
+    return <Navigate to="/profiles" replace />;
+  }
   if (trialExpired) return <Navigate to="/bazinga-unlimited?from=trial-expired" replace />;
   return <Choice />;
 };
@@ -53,11 +70,14 @@ const RequireAuth = ({ children }: { children: React.ReactNode }) => {
 };
 
 const RequireProfile = ({ children }: { children: React.ReactNode }) => {
-  const { user, currentProfile, trialExpired } = useAuth();
+  const { user, currentProfile, trialExpired, profiles, profilesLoading } = useAuth();
   if (!user) return <Navigate to="/auth" replace />;
-  if (!currentProfile) return <Navigate to="/profiles" replace />;
-  // After the 7-day trial ends the user must pick a paid plan to keep using the
-  // app. We allow Manage/Account/profile routes through; only content is gated.
+  if (!currentProfile) {
+    // Browser reload or deep-link: AuthProvider has the session token but
+    // profiles are still loading. Don't bounce to /profiles until we know.
+    if (usingStoredProfile(profiles, profilesLoading)) return <ProfilesLoading />;
+    return <Navigate to="/profiles" replace />;
+  }
   if (trialExpired) return <Navigate to="/bazinga-unlimited?from=trial-expired" replace />;
   return <>{children}</>;
 };
@@ -71,6 +91,7 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
+              <ScrollToTop />
               <Routes>
                 <Route path="/" element={<RootGate />} />
                 <Route path="/auth" element={<Auth />} />

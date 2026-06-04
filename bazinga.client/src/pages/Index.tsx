@@ -8,9 +8,10 @@ import Footer from "@/components/Footer";
 import BrowseByFilter from "@/components/BrowseByFilter";
 import ComicModal from "@/components/ComicModal";
 import MangaUniverse from "@/components/MangaUniverse";
+import MangaModal from "@/components/MangaModal";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
-import { fetchTopManga } from "@/lib/metadata";
+import { fetchTopManga, type MangaDto } from "@/lib/metadata";
 import {
   placeholderComics,
   type PlaceholderComic,
@@ -43,9 +44,21 @@ interface DisplayComic {
 const HOME_COMIC_LIMIT = 18; // three rows on the comics section
 const NEW_THIS_WEEK_TOTAL = 6;
 
+// Carries enough state for a homepage tile to route its click to the right
+// modal — extra fields beyond the visible image/title/creators stay attached.
+interface MixedTile {
+  image: string;
+  title: string;
+  creators?: string;
+  score?: number | null;
+  _comic?: DisplayComic;
+  _manga?: MangaDto;
+}
+
 const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedComic, setSelectedComic] = useState<DisplayComic | null>(null);
+  const [selectedManga, setSelectedManga] = useState<MangaDto | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [browseFilter, setBrowseFilter] = useState<{ type: string; value: string }>({
     type: "",
@@ -141,8 +154,8 @@ const Index = () => {
   }, [searchQuery, browseFilter, allComics]);
 
   /** "New This Week" = newest 3 comics + 3 newest top manga titles, mixed. */
-  const newThisWeek = useMemo(() => {
-    const sortedComics = [...allComics]
+  const newThisWeek = useMemo<MixedTile[]>(() => {
+    const sortedComics: MixedTile[] = [...allComics]
       .sort(
         (a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
       )
@@ -151,16 +164,19 @@ const Index = () => {
         image: c.image,
         title: c.title,
         creators: c.creators,
+        _comic: c,
       }));
-    const mangaSlice = (topManga.data?.data ?? [])
+    const mangaSlice: MixedTile[] = (topManga.data?.data ?? [])
       .slice(0, Math.floor(NEW_THIS_WEEK_TOTAL / 2))
       .map((m) => ({
         image: m.largeImageUrl ?? m.imageUrl ?? "",
         title: m.title,
         creators: m.authors.join(", "),
+        score: m.score,
+        _manga: m,
       }));
     // Interleave so it doesn't look segregated.
-    const out: { image: string; title: string; creators?: string }[] = [];
+    const out: MixedTile[] = [];
     const max = Math.max(sortedComics.length, mangaSlice.length);
     for (let i = 0; i < max; i++) {
       if (sortedComics[i]) out.push(sortedComics[i]);
@@ -169,18 +185,28 @@ const Index = () => {
     return out.slice(0, NEW_THIS_WEEK_TOTAL);
   }, [allComics, topManga.data]);
 
-  const homeComics = useMemo(
-    () => allComics.slice(0, HOME_COMIC_LIMIT),
+  const homeComics = useMemo<MixedTile[]>(
+    () =>
+      allComics.slice(0, HOME_COMIC_LIMIT).map((c) => ({
+        image: c.image,
+        title: c.title,
+        creators: c.creators,
+        _comic: c,
+      })),
     [allComics]
   );
 
   const isFiltered = Boolean(searchQuery) || Boolean(browseFilter.value) || viewAll;
 
-  const handleComicClick = (comic: { image: string; title: string; creators?: string }) => {
-    const match = allComics.find((c) => c.title === comic.title);
-    if (!match) return; // mixed-in manga or non-comic — modal is comic-only
-    setSelectedComic(match);
-    setIsModalOpen(true);
+  const handleTileClick = (item: MixedTile) => {
+    if (item._manga) {
+      setSelectedManga(item._manga);
+      return;
+    }
+    if (item._comic) {
+      setSelectedComic(item._comic);
+      setIsModalOpen(true);
+    }
   };
 
   const handleBrowseFilterChange = (type: string, value: string) => {
@@ -277,14 +303,14 @@ const Index = () => {
               title="NEW THIS WEEK"
               comics={newThisWeek}
               showViewAll={false}
-              onComicClick={handleComicClick}
+              onComicClick={handleTileClick}
             />
             <ComicSection
               id="comics"
               title="COMICS"
               comics={homeComics}
               viewAllHref="/comics/all"
-              onComicClick={handleComicClick}
+              onComicClick={handleTileClick}
             />
             <MangaUniverse mode="home" viewAllHref="/manga" />
           </>
@@ -298,6 +324,9 @@ const Index = () => {
           onClose={() => setIsModalOpen(false)}
           comic={modalComic}
         />
+      )}
+      {selectedManga && (
+        <MangaModal manga={selectedManga} onClose={() => setSelectedManga(null)} />
       )}
     </div>
   );

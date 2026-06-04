@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
@@ -76,6 +76,18 @@ const AllComics = () => {
         c.character.toLowerCase().includes(q)
     );
   }, [masterQuery, all]);
+
+  // Deep-link: ?openComic=<id> pops the modal as if the card was clicked.
+  const openComicId = searchParams.get("openComic");
+  useEffect(() => {
+    if (!openComicId || selected) return;
+    const match = all.find((c) => c.id === Number(openComicId));
+    if (match) {
+      setSelected(match);
+      setModalOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openComicId, all]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
