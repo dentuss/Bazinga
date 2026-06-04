@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Loader2, Search, Sparkles, X } from "lucide-react";
 import {
@@ -9,7 +9,13 @@ import {
   type MangaDto,
   type SuperheroDto,
 } from "@/lib/metadata";
-import { placeholderComics, type PlaceholderComic } from "@/data/placeholderComics";
+import {
+  placeholderComics,
+  type PlaceholderComic,
+} from "@/data/placeholderComics";
+import MangaModal from "@/components/MangaModal";
+import HeroModal from "@/components/HeroModal";
+import ComicModal from "@/components/ComicModal";
 import { cn } from "@/lib/utils";
 
 interface MasterSearchProps {
@@ -24,19 +30,34 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
 
-  // Reset state when closed; bind Escape while open.
+  // Modals popped from the search itself — so clicking a result opens the
+  // detail right here instead of bouncing to a catalog page.
+  const [openComic, setOpenComic] = useState<PlaceholderComic | null>(null);
+  const [openHero, setOpenHero] = useState<SuperheroDto | null>(null);
+  const [openManga, setOpenManga] = useState<MangaDto | null>(null);
+
+  // Reset on close; bind Escape while open.
   useEffect(() => {
     if (!open) {
       setQuery("");
       setDebounced("");
+      setOpenComic(null);
+      setOpenHero(null);
+      setOpenManga(null);
       return;
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        // Layered close: dismiss top-most modal first, then the overlay.
+        if (openComic) return setOpenComic(null);
+        if (openHero) return setOpenHero(null);
+        if (openManga) return setOpenManga(null);
+        onClose();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, openComic, openHero, openManga]);
 
   // Debounce typing.
   useEffect(() => {
@@ -55,19 +76,19 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
           c.character.toLowerCase().includes(q) ||
           c.creators.toLowerCase().includes(q)
       )
-      .slice(0, 4);
+      .slice(0, 5);
   }, [debounced]);
 
   const heroes = useQuery({
     queryKey: ["master-search:characters", debounced],
-    queryFn: () => fetchSuperheroes({ q: debounced, limit: 4 }),
+    queryFn: () => fetchSuperheroes({ q: debounced, limit: 5 }),
     enabled: debounced.length > 1,
     staleTime: 60 * 1000,
   });
 
   const manga = useQuery({
     queryKey: ["master-search:manga", debounced],
-    queryFn: () => searchManga({ q: debounced, limit: 4 }),
+    queryFn: () => searchManga({ q: debounced, limit: 5 }),
     enabled: debounced.length > 1,
     staleTime: 60 * 1000,
   });
@@ -77,11 +98,12 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
   const totalLoading = heroes.isFetching || manga.isFetching;
   const heroHits = heroes.data?.data ?? [];
   const mangaHits = manga.data?.data ?? [];
-  const hasAnyResult =
-    debounced.length > 1 &&
-    (comicMatches.length > 0 || heroHits.length > 0 || mangaHits.length > 0);
   const empty =
-    debounced.length > 1 && !totalLoading && !hasAnyResult;
+    debounced.length > 1 &&
+    !totalLoading &&
+    comicMatches.length === 0 &&
+    heroHits.length === 0 &&
+    mangaHits.length === 0;
 
   const goToFiltered = (target: "comics" | "characters" | "manga") => {
     const q = encodeURIComponent(debounced);
@@ -93,170 +115,220 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
 
   return (
     <div
-      className="fixed inset-0 z-[90] bg-black/85 backdrop-blur-sm flex items-start justify-center p-4 md:p-8 animate-fade-in"
+      className="fixed inset-0 z-[90] bg-black/85 backdrop-blur-md flex flex-col animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-label="Search Bazinga"
       onClick={onClose}
     >
+      {/* Top label + close — sit floating above the page like the first version. */}
       <div
-        className="w-full max-w-2xl mt-[8vh] max-h-[80vh] flex flex-col rounded-xl border border-border bg-card shadow-2xl shadow-primary/10 overflow-hidden"
+        className="container mx-auto max-w-3xl px-4 md:px-8 pt-6 md:pt-10"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Input row */}
-        <div className="relative border-b border-border">
+        <div className="flex items-center justify-between mb-6">
+          <p className="text-xs font-bold uppercase tracking-[0.4em] text-primary">
+            Search Bazinga
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-9 w-9 rounded-full bg-card/70 hover:bg-card border border-border/60 flex items-center justify-center transition-colors"
+            aria-label="Close search"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
           <input
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search comics, characters, manga…"
-            className="w-full h-14 bg-transparent pl-12 pr-24 text-base font-semibold outline-none placeholder:text-muted-foreground/70"
+            className="w-full h-14 md:h-16 rounded-xl bg-background/80 backdrop-blur border-2 border-border pl-12 pr-24 text-base md:text-lg font-semibold outline-none focus:border-primary focus:shadow-[0_0_30px_hsl(0_82%_55%/0.3)] transition-all placeholder:text-muted-foreground/70"
           />
           {totalLoading && (
-            <Loader2 className="absolute right-14 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+            <Loader2 className="absolute right-12 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
           )}
           {query && (
             <button
               type="button"
               onClick={() => setQuery("")}
-              className="absolute right-10 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full hover:bg-muted grid place-items-center transition-colors"
+              className="absolute right-4 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full hover:bg-muted grid place-items-center transition-colors"
               aria-label="Clear"
             >
               <X className="h-4 w-4" />
             </button>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full hover:bg-muted grid place-items-center transition-colors"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto">
-          {!debounced ? (
-            <div className="p-5 space-y-3">
-              <p className="text-xs font-bold uppercase tracking-[0.3em] text-muted-foreground">
-                Try searching
+        <p className="mt-3 text-[11px] text-muted-foreground flex items-center justify-between">
+          <span>
+            Press{" "}
+            <kbd className="px-1.5 py-0.5 rounded bg-card border border-border font-bold text-foreground">
+              Esc
+            </kbd>{" "}
+            to close
+          </span>
+          {debounced.length > 1 && !totalLoading && (
+            <span className="text-[10px] uppercase tracking-wider">
+              Live across Bazinga
+            </span>
+          )}
+        </p>
+      </div>
+
+      {/* Body — prompts when idle, grouped results otherwise. */}
+      <div
+        className="flex-1 overflow-y-auto pt-4 pb-12"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="container mx-auto max-w-3xl px-4 md:px-8">
+          {!debounced && (
+            <div className="pt-4">
+              <p className="text-xs font-bold uppercase tracking-[0.3em] text-muted-foreground mb-3">
+                Try
               </p>
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-3">
                 {PROMPTS.map((p) => (
                   <button
                     key={p}
                     type="button"
                     onClick={() => setQuery(p)}
-                    className="group flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:bg-primary/5"
+                    className="group flex items-center gap-3 rounded-lg border border-border bg-card/70 backdrop-blur px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:bg-primary/5 hover:shadow-lg hover:shadow-primary/20"
                   >
                     <Sparkles className="h-4 w-4 text-primary shrink-0" />
-                    <span className="text-sm font-semibold truncate group-hover:text-primary transition-colors">
-                      {p}
-                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Try
+                      </p>
+                      <p className="font-bold truncate group-hover:text-primary transition-colors">
+                        {p}
+                      </p>
+                    </div>
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-muted-foreground pt-2 border-t border-border mt-3">
-                Tip — open from anywhere with{" "}
-                <kbd className="px-1.5 py-0.5 rounded bg-muted border border-border font-bold text-foreground text-[10px]">
-                  Ctrl K
-                </kbd>{" "}
-                or{" "}
-                <kbd className="px-1.5 py-0.5 rounded bg-muted border border-border font-bold text-foreground text-[10px]">
-                  ⌘K
-                </kbd>
-                .
-              </p>
-            </div>
-          ) : empty ? (
-            <div className="px-5 py-10 text-center text-sm text-muted-foreground">
-              No matches for{" "}
-              <span className="font-bold text-foreground">"{debounced}"</span>.
-            </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {comicMatches.length > 0 && (
-                <Section title="Comics" onSeeAll={() => goToFiltered("comics")}>
-                  {comicMatches.map((c) => (
-                    <Result
-                      key={c.id}
-                      image={c.image}
-                      title={c.title}
-                      subtitle={`${c.series} · ${c.creators}`}
-                      href={`/comics/all?search=${encodeURIComponent(c.title)}`}
-                      onClose={onClose}
-                    />
-                  ))}
-                </Section>
-              )}
-              {heroHits.length > 0 && (
-                <Section title="Characters" onSeeAll={() => goToFiltered("characters")}>
-                  {heroHits.map((h: SuperheroDto) => (
-                    <Result
-                      key={h.id}
-                      image={h.images.sm ?? h.images.md ?? ""}
-                      title={h.name}
-                      subtitle={superheroSubtitle(h)}
-                      badge={h.publisher ?? undefined}
-                      href={`/characters?q=${encodeURIComponent(h.name)}`}
-                      onClose={onClose}
-                    />
-                  ))}
-                </Section>
-              )}
-              {mangaHits.length > 0 && (
-                <Section title="Manga" onSeeAll={() => goToFiltered("manga")}>
-                  {mangaHits.map((m: MangaDto) => (
-                    <Result
-                      key={m.malId}
-                      image={m.imageUrl ?? ""}
-                      title={m.title}
-                      subtitle={
-                        m.titleEnglish && m.titleEnglish !== m.title
-                          ? m.titleEnglish
-                          : m.authors.join(", ") || "Manga"
-                      }
-                      badge={m.score ? `★ ${m.score.toFixed(1)}` : undefined}
-                      href={`/manga?q=${encodeURIComponent(m.title)}`}
-                      onClose={onClose}
-                    />
-                  ))}
-                </Section>
-              )}
             </div>
           )}
+
+          {empty && (
+            <p className="text-center text-muted-foreground py-16">
+              No matches for{" "}
+              <span className="font-bold text-foreground">"{debounced}"</span>.
+            </p>
+          )}
+
+          <div className="space-y-7 pt-2">
+            {comicMatches.length > 0 && (
+              <Section
+                title="Comics"
+                count={comicMatches.length}
+                onSeeAll={() => goToFiltered("comics")}
+              >
+                {comicMatches.map((c) => (
+                  <Result
+                    key={c.id}
+                    image={c.image}
+                    title={c.title}
+                    subtitle={`${c.series} · ${c.creators}`}
+                    onClick={() => setOpenComic(c)}
+                  />
+                ))}
+              </Section>
+            )}
+            {heroHits.length > 0 && (
+              <Section
+                title="Characters"
+                count={heroHits.length}
+                onSeeAll={() => goToFiltered("characters")}
+              >
+                {heroHits.map((h: SuperheroDto) => (
+                  <Result
+                    key={h.id}
+                    image={h.images.sm ?? h.images.md ?? ""}
+                    title={h.name}
+                    subtitle={superheroSubtitle(h)}
+                    badge={h.publisher ?? undefined}
+                    onClick={() => setOpenHero(h)}
+                  />
+                ))}
+              </Section>
+            )}
+            {mangaHits.length > 0 && (
+              <Section
+                title="Manga"
+                count={mangaHits.length}
+                onSeeAll={() => goToFiltered("manga")}
+              >
+                {mangaHits.map((m: MangaDto) => (
+                  <Result
+                    key={m.malId}
+                    image={m.imageUrl ?? ""}
+                    title={m.title}
+                    subtitle={
+                      m.titleEnglish && m.titleEnglish !== m.title
+                        ? m.titleEnglish
+                        : m.authors.join(", ") || "Manga"
+                    }
+                    badge={m.score ? `★ ${m.score.toFixed(1)}` : undefined}
+                    onClick={() => setOpenManga(m)}
+                  />
+                ))}
+              </Section>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Modals — rendered above the overlay so a click opens detail in place. */}
+      {openComic && (
+        <ComicModal
+          isOpen={true}
+          onClose={() => setOpenComic(null)}
+          comic={{
+            id: openComic.id,
+            title: openComic.title,
+            image: openComic.image,
+            creators: openComic.creators,
+            description: openComic.description,
+          }}
+        />
+      )}
+      {openHero && <HeroModal hero={openHero} onClose={() => setOpenHero(null)} />}
+      {openManga && <MangaModal manga={openManga} onClose={() => setOpenManga(null)} />}
     </div>
   );
 };
 
 const Section = ({
   title,
+  count,
   onSeeAll,
   children,
 }: {
   title: string;
+  count: number;
   onSeeAll: () => void;
   children: React.ReactNode;
 }) => (
-  <div className="px-5 py-3">
-    <div className="flex items-center justify-between mb-2">
-      <h3 className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">
-        {title}
+  <div>
+    <div className="flex items-center justify-between mb-3">
+      <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-primary">
+        {title} <span className="text-muted-foreground ml-1">({count})</span>
       </h3>
       <button
         type="button"
         onClick={onSeeAll}
-        className="text-[11px] font-semibold text-primary hover:underline inline-flex items-center gap-1"
+        className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
       >
         See all
         <ArrowRight className="h-3 w-3" />
       </button>
     </div>
-    <div className="space-y-1.5">{children}</div>
+    <div className="grid gap-2">{children}</div>
   </div>
 );
 
@@ -265,25 +337,23 @@ const Result = ({
   title,
   subtitle,
   badge,
-  href,
-  onClose,
+  onClick,
 }: {
   image: string;
   title: string;
   subtitle: string;
   badge?: string;
-  href: string;
-  onClose: () => void;
+  onClick: () => void;
 }) => (
-  <Link
-    to={href}
-    onClick={onClose}
+  <button
+    type="button"
+    onClick={onClick}
     className={cn(
-      "group flex items-center gap-3 rounded-md px-2 py-2 transition-all",
-      "hover:bg-muted/60 hover:translate-x-0.5"
+      "group w-full flex items-center gap-4 rounded-lg border border-border bg-card/70 backdrop-blur p-3 text-left transition-all",
+      "hover:border-primary/60 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/20"
     )}
   >
-    <div className="relative h-12 w-9 rounded-sm overflow-hidden bg-muted shrink-0">
+    <div className="relative h-16 w-12 rounded-md overflow-hidden bg-muted shrink-0">
       {image && (
         <img
           src={image}
@@ -295,10 +365,10 @@ const Result = ({
       )}
     </div>
     <div className="flex-1 min-w-0">
-      <p className="text-sm font-bold truncate group-hover:text-primary transition-colors">
+      <p className="font-bold truncate group-hover:text-primary transition-colors">
         {title}
       </p>
-      <p className="text-[11px] text-muted-foreground truncate">{subtitle}</p>
+      <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
     </div>
     {badge && (
       <span className="hidden sm:inline-block text-[10px] font-bold uppercase tracking-wider border border-border rounded-full px-2 py-0.5 text-muted-foreground shrink-0">
@@ -306,7 +376,7 @@ const Result = ({
       </span>
     )}
     <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:text-primary group-hover:translate-x-1 transition-all shrink-0" />
-  </Link>
+  </button>
 );
 
 export default MasterSearch;
