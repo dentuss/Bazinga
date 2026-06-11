@@ -41,8 +41,8 @@ interface DisplayComic {
   createdAt?: string;
 }
 
-const HOME_COMIC_LIMIT = 18; // three rows on the comics section
-const NEW_THIS_WEEK_TOTAL = 6;
+const HOME_COMIC_LIMIT = 20; // length of the horizontal rail on the homepage
+const NEW_THIS_WEEK_TOTAL = 12; // single rail of comics + manga, mixed
 
 // Carries enough state for a homepage tile to route its click to the right
 // modal — extra fields beyond the visible image/title/creators stay attached.
@@ -108,7 +108,12 @@ const Index = () => {
     []
   );
 
-  const allComics: DisplayComic[] = dbComics.length > 0 ? dbComics : fallbackComics;
+  // Always use the placeholder catalogue on the home shelf — DB-stored comics
+  // can ship without covers/descriptions which leaves the homepage looking
+  // broken. The full catalog at /comics/all still merges DB results when present.
+  const allComics: DisplayComic[] = fallbackComics;
+  // Keep dbComics around to dedupe browse-filter options when populated.
+  void dbComics;
 
   const browseOptions = useMemo(() => {
     const sorted = (arr: string[]) =>
@@ -225,6 +230,7 @@ const Index = () => {
         image: selectedComic.image,
         creators: selectedComic.creators,
         description: selectedComic.description,
+        series: selectedComic.series,
       }
     : null;
 

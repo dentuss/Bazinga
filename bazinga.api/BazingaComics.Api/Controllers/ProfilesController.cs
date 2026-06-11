@@ -34,17 +34,44 @@ public class ProfilesController : ControllerBase
 
         if (profiles.Count == 0)
         {
-            var root = new Entities.Profile
+            // Legacy users (registered before signup auto-created their root)
+            // hit this path. Add the root, save, then re-query to converge with
+            // any sibling request that raced us (React StrictMode fires two GETs).
+            _db.Profiles.Add(new Entities.Profile
             {
                 UserId = user.Id,
                 Name = string.IsNullOrWhiteSpace(user.FirstName) ? user.Username : user.FirstName!,
                 AvatarColor = DefaultAvatarColor,
                 IsRoot = true,
-                IsKids = false
-            };
-            _db.Profiles.Add(root);
-            await _db.SaveChangesAsync(ct);
-            profiles.Add(root);
+                IsKids = false,
+            });
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // Concurrent request created one too — fine, we'll pick it up below.
+            }
+            profiles = await _db.Profiles
+                .Where(p => p.UserId == user.Id)
+                .OrderByDescending(p => p.IsRoot)
+                .ThenBy(p => p.Id)
+                .ToListAsync(ct);
+
+            // If we somehow ended up with two roots (no unique constraint, two
+            // races both succeeded), drop the extras and keep the lowest id.
+            var roots = profiles.Where(p => p.IsRoot).OrderBy(p => p.Id).ToList();
+            if (roots.Count > 1)
+            {
+                _db.Profiles.RemoveRange(roots.Skip(1));
+                await _db.SaveChangesAsync(ct);
+                profiles = await _db.Profiles
+                    .Where(p => p.UserId == user.Id)
+                    .OrderByDescending(p => p.IsRoot)
+                    .ThenBy(p => p.Id)
+                    .ToListAsync(ct);
+            }
         }
 
         return Ok(profiles.Select(ToDto));

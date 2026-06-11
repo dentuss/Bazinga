@@ -115,25 +115,25 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
 
   return (
     <div
-      className="fixed inset-0 z-[90] bg-black/85 backdrop-blur-md flex flex-col animate-fade-in"
+      className="fixed inset-0 z-[90] bg-black/90 backdrop-blur-md flex flex-col overflow-hidden animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-label="Search Bazinga"
       onClick={onClose}
     >
-      {/* Top label + close — sit floating above the page like the first version. */}
+      {/* Top strip — title + close + input. Bound by the viewport, not the page container. */}
       <div
-        className="container mx-auto max-w-3xl px-4 md:px-8 pt-6 md:pt-10"
+        className="w-full max-w-2xl mx-auto px-4 sm:px-6 pt-6 md:pt-10"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-5">
           <p className="text-xs font-bold uppercase tracking-[0.4em] text-primary">
             Search Bazinga
           </p>
           <button
             type="button"
             onClick={onClose}
-            className="h-9 w-9 rounded-full bg-card/70 hover:bg-card border border-border/60 flex items-center justify-center transition-colors"
+            className="h-9 w-9 rounded-full bg-card hover:bg-muted border border-border/60 flex items-center justify-center transition-colors"
             aria-label="Close search"
           >
             <X className="h-4 w-4" />
@@ -141,42 +141,34 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
         </div>
 
         <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
           <input
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search comics, characters, manga…"
-            className="w-full h-14 md:h-16 rounded-xl bg-background/80 backdrop-blur border-2 border-border pl-12 pr-24 text-base md:text-lg font-semibold outline-none focus:border-primary focus:shadow-[0_0_30px_hsl(0_82%_55%/0.3)] transition-all placeholder:text-muted-foreground/70"
+            className="w-full h-14 md:h-16 rounded-xl bg-card border-2 border-border pl-12 pr-12 text-base md:text-lg font-semibold outline-none focus:border-primary focus:shadow-[0_0_30px_hsl(0_82%_55%/0.3)] transition-all placeholder:text-muted-foreground/70"
           />
-          {totalLoading && (
-            <Loader2 className="absolute right-12 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-          )}
-          {query && (
+          {query ? (
             <button
               type="button"
               onClick={() => setQuery("")}
-              className="absolute right-4 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full hover:bg-muted grid place-items-center transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full hover:bg-muted grid place-items-center transition-colors"
               aria-label="Clear"
             >
               <X className="h-4 w-4" />
             </button>
-          )}
+          ) : totalLoading ? (
+            <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+          ) : null}
         </div>
 
-        <p className="mt-3 text-[11px] text-muted-foreground flex items-center justify-between">
-          <span>
-            Press{" "}
-            <kbd className="px-1.5 py-0.5 rounded bg-card border border-border font-bold text-foreground">
-              Esc
-            </kbd>{" "}
-            to close
-          </span>
-          {debounced.length > 1 && !totalLoading && (
-            <span className="text-[10px] uppercase tracking-wider">
-              Live across Bazinga
-            </span>
-          )}
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          Press{" "}
+          <kbd className="px-1.5 py-0.5 rounded bg-card border border-border font-bold text-foreground">
+            Esc
+          </kbd>{" "}
+          to close
         </p>
       </div>
 
@@ -185,7 +177,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
         className="flex-1 overflow-y-auto pt-4 pb-12"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="container mx-auto max-w-3xl px-4 md:px-8">
+        <div className="w-full max-w-2xl mx-auto px-4 sm:px-6">
           {!debounced && (
             <div className="pt-4">
               <p className="text-xs font-bold uppercase tracking-[0.3em] text-muted-foreground mb-3">
@@ -197,7 +189,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
                     key={p}
                     type="button"
                     onClick={() => setQuery(p)}
-                    className="group flex items-center gap-3 rounded-lg border border-border bg-card/70 backdrop-blur px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:bg-primary/5 hover:shadow-lg hover:shadow-primary/20"
+                    className="group flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:bg-primary/5 hover:shadow-lg hover:shadow-primary/20"
                   >
                     <Sparkles className="h-4 w-4 text-primary shrink-0" />
                     <div className="min-w-0">
@@ -349,7 +341,7 @@ const Result = ({
     type="button"
     onClick={onClick}
     className={cn(
-      "group w-full flex items-center gap-4 rounded-lg border border-border bg-card/70 backdrop-blur p-3 text-left transition-all",
+      "group w-full flex items-center gap-4 rounded-lg border border-border bg-card p-3 text-left transition-all",
       "hover:border-primary/60 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/20"
     )}
   >

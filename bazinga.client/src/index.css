@@ -94,3 +94,10 @@ All colors MUST be HSL.
     @apply font-bold tracking-tight;
   }
 }
+
+@layer utilities {
+  /* Hide the horizontal scrollbar inside Netflix-style rails on Webkit
+     browsers. Firefox is handled separately via scrollbar-width: none. */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+}

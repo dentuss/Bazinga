@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import MangaModal from "@/components/MangaModal";
+import MediaCard from "@/components/MediaCard";
+import Rail from "@/components/Rail";
 import {
   fetchManga,
   fetchMangaGenres,
@@ -18,9 +20,7 @@ interface MangaUniverseProps {
 }
 
 const FULL_PAGE_SIZE = 18; // three rows × six cards on lg+
-const HOME_LIMIT = 18; // three rows on the home preview
-
-import MediaCard from "@/components/MediaCard";
+const HOME_LIMIT = 20; // rail length on the home preview
 
 const MangaCard = ({
   manga,
@@ -111,36 +111,55 @@ const MangaUniverse = ({ mode = "full", viewAllHref }: MangaUniverseProps = {}) 
   const items = list.data?.data ?? [];
   const pagination = list.data?.pagination;
 
+  // Home preview = single horizontal rail with arrow buttons (no chips, no
+  // pager). Full = the discovery page (chips + paginated grid).
+  if (isHome) {
+    return (
+      <>
+        <Rail
+          id="manga-rail"
+          title="MANGA"
+          viewAllHref={viewAllHref}
+          loading={list.isLoading}
+          empty={items.length === 0}
+          emptyMessage="No manga to show yet."
+        >
+          {items.map((m) => (
+            <MediaCard
+              key={m.malId}
+              image={m.largeImageUrl ?? m.imageUrl ?? "/placeholder.svg"}
+              title={m.title}
+              subtitle={m.authors.join(", ") || m.type || "Manga"}
+              score={m.score}
+              width="rail"
+              onClick={() => setSelected(m)}
+            />
+          ))}
+        </Rail>
+        {selected && <MangaModal manga={selected} onClose={() => setSelected(null)} />}
+      </>
+    );
+  }
+
   return (
     <section id="manga" className="container mx-auto px-4 md:px-8 py-12 md:py-16">
-      <div className={isHome ? "flex items-center justify-between mb-6" : "mb-6"}>
+      <div className="mb-6">
         <div>
           <p className="text-xs md:text-sm font-bold uppercase tracking-[0.3em] text-primary">
-            {isHome ? "Manga" : "Discover"}
+            Discover
           </p>
           <h2 className="text-2xl md:text-4xl font-black tracking-tight mt-2">
-            {isHome ? "MANGA" : "Manga Universe"}
+            Manga Universe
           </h2>
-          {!isHome && (
-            <p className="text-sm text-muted-foreground max-w-2xl">
-              {masterQuery
-                ? `Manga matching "${masterQuery}", sourced live from MyAnimeList.`
-                : "Covers, scores, synopsis. Sourced live from MyAnimeList."}
-            </p>
-          )}
+          <p className="text-sm text-muted-foreground max-w-2xl">
+            {masterQuery
+              ? `Manga matching "${masterQuery}", sourced live from MyAnimeList.`
+              : "Covers, scores, synopsis. Sourced live from MyAnimeList."}
+          </p>
         </div>
-        {isHome && viewAllHref && (
-          <Link
-            to={viewAllHref}
-            className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 transition-colors group"
-          >
-            SEE ALL
-            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-          </Link>
-        )}
       </div>
 
-      {!isHome && curatedGenres.length > 0 && (
+      {curatedGenres.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-6">
           <GenreChip
             label="Top picks"
@@ -184,7 +203,7 @@ const MangaUniverse = ({ mode = "full", viewAllHref }: MangaUniverseProps = {}) 
         )}
       </div>
 
-      {!isHome && pagination && pagination.lastVisiblePage > 1 && (
+      {pagination && pagination.lastVisiblePage > 1 && (
         <div className="mt-8 flex items-center justify-center gap-3">
           <PagerButton
             disabled={page <= 1}

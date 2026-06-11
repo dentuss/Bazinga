@@ -1,6 +1,5 @@
-import { ChevronRight } from "lucide-react";
-import { Link } from "react-router-dom";
 import MediaCard from "./MediaCard";
+import Rail from "./Rail";
 
 interface ComicLike {
   image: string;
@@ -10,7 +9,7 @@ interface ComicLike {
 }
 
 interface ComicSectionProps<T extends ComicLike> {
-  id?: string;
+  id: string;
   title: string;
   comics: T[];
   showViewAll?: boolean;
@@ -18,6 +17,12 @@ interface ComicSectionProps<T extends ComicLike> {
   onComicClick?: (comic: T) => void;
 }
 
+/**
+ * Horizontal Netflix-style rail of comic / manga tiles. The earlier multi-row
+ * grid layout produced a horizontal page scroll on certain widths and made the
+ * homepage feel inert — this version keeps every section tight and discoverable
+ * via the on-edge arrow buttons.
+ */
 function ComicSection<T extends ComicLike>({
   id,
   title,
@@ -26,41 +31,27 @@ function ComicSection<T extends ComicLike>({
   viewAllHref,
   onComicClick,
 }: ComicSectionProps<T>) {
+  const hrefForRail = showViewAll ? viewAllHref : undefined;
   return (
-    <section id={id} className="py-12 md:py-16">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-3xl md:text-4xl font-black">{title}</h2>
-          {showViewAll &&
-            (viewAllHref ? (
-              <Link
-                to={viewAllHref}
-                className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 transition-colors group"
-              >
-                SEE ALL
-                <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </Link>
-            ) : (
-              <button className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 transition-colors group">
-                SEE ALL
-                <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </button>
-            ))}
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
-          {comics.map((comic, index) => (
-            <MediaCard
-              key={index}
-              image={comic.image}
-              title={comic.title}
-              subtitle={comic.creators}
-              score={comic.score}
-              onClick={() => onComicClick?.(comic)}
-            />
-          ))}
-        </div>
-      </div>
-    </section>
+    <Rail
+      id={id}
+      title={title}
+      viewAllHref={hrefForRail}
+      empty={comics.length === 0}
+      emptyMessage="No issues to show yet."
+    >
+      {comics.map((comic, index) => (
+        <MediaCard
+          key={`${id}-${index}`}
+          image={comic.image}
+          title={comic.title}
+          subtitle={comic.creators}
+          score={comic.score}
+          width="rail"
+          onClick={() => onComicClick?.(comic)}
+        />
+      ))}
+    </Rail>
   );
 }
 
