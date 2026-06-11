@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,13 +7,11 @@ import { MAX_PROFILES_PER_ACCOUNT } from "@/lib/profiles";
 
 const ProfileSelector = () => {
   const navigate = useNavigate();
-  const { user, profiles, profilesLoading, selectProfile, refreshProfiles, logout } = useAuth();
+  const { user, profiles, profilesLoading, selectProfile, logout } = useAuth();
 
-  useEffect(() => {
-    if (user && profiles.length === 0 && !profilesLoading) {
-      void refreshProfiles();
-    }
-  }, [user, profiles.length, profilesLoading, refreshProfiles]);
+  // The AuthProvider already kicks off the profile fetch as soon as the token
+  // shows up — re-triggering it here was double-firing the call in StrictMode
+  // and racing the auto-create of the root profile (two roots got inserted).
 
   if (!user) return <Navigate to="/auth" replace />;
 

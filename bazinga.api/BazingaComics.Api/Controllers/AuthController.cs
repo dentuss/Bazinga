@@ -68,6 +68,9 @@ public class AuthController : ControllerBase
         _db.Users.Add(user);
         await _db.SaveChangesAsync(ct);
 
+        EnsureRootProfile(user);
+        await _db.SaveChangesAsync(ct);
+
         return Ok(BuildResponse(user));
     }
 
@@ -272,6 +275,11 @@ public class AuthController : ControllerBase
         entity.ConsumedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
+        // Create the root profile inline at signup so concurrent GET /api/profiles
+        // calls (e.g. from React StrictMode double-render) don't race-create two.
+        EnsureRootProfile(user);
+        await _db.SaveChangesAsync(ct);
+
         return Ok(BuildResponse(user));
     }
 
@@ -285,6 +293,23 @@ public class AuthController : ControllerBase
             candidate = $"{baseUsername}{suffix++}";
         }
         return candidate;
+    }
+
+    /// <summary>
+    /// Attach a root profile to a freshly-created user. Called at signup time
+    /// so the GET /api/profiles endpoint never has to race-create one.
+    /// </summary>
+    private void EnsureRootProfile(User user)
+    {
+        var name = string.IsNullOrWhiteSpace(user.FirstName) ? user.Username : user.FirstName!;
+        _db.Profiles.Add(new Entities.Profile
+        {
+            UserId = user.Id,
+            Name = name,
+            AvatarColor = "#E50914",
+            IsRoot = true,
+            IsKids = false,
+        });
     }
 
     private AuthResponse BuildResponse(User user) => new()

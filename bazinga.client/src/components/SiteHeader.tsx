@@ -6,18 +6,16 @@ import {
   HelpCircle,
   LogOut,
   Menu,
-  Moon,
   Pencil,
   Plus,
   Search,
   Settings,
   Sparkles,
-  Sun,
   User,
   Users,
   X,
 } from "lucide-react";
-import { useTheme } from "next-themes";
+// theme switching has been removed — dark is the only mode now
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,7 +67,6 @@ const SiteHeader = ({
 }: SiteHeaderProps) => {
   const { user, profiles, currentProfile, hasPaidSubscription, selectProfile, logout } = useAuth();
   const navigate = useNavigate();
-  const { theme, setTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -94,7 +91,6 @@ const SiteHeader = ({
 
   const canManage = !currentProfile || currentProfile.isRoot;
   const canAdd = canManage && profiles.length < MAX_PROFILES_PER_ACCOUNT;
-  const isDark = theme === "dark";
   const otherProfiles = profiles.filter((p) => p.id !== currentProfile?.id);
 
   const handleSwitchProfile = (id: number) => {
@@ -107,7 +103,6 @@ const SiteHeader = ({
     navigate("/");
   };
 
-  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
   const renderBrand = () => {
     if (brand.layout === "inline") {
@@ -304,23 +299,6 @@ const SiteHeader = ({
                   <span className="text-sm">Account</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    toggleTheme();
-                  }}
-                  className="gap-3 cursor-pointer"
-                >
-                  {isDark ? (
-                    <Moon className="h-4 w-4 text-orange-400" />
-                  ) : (
-                    <Sun className="h-4 w-4 text-orange-500" />
-                  )}
-                  <span className="text-sm flex-1">Theme</span>
-                  <span className="text-xs uppercase tracking-wider text-muted-foreground">
-                    {isDark ? "Dark" : "Light"}
-                  </span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
                   onSelect={() => navigate("/under-construction")}
                   className="gap-3 cursor-pointer"
                 >
@@ -418,17 +396,6 @@ const SiteHeader = ({
                     >
                       <Settings className="h-4 w-4" />
                       Account
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="w-full gap-2"
-                      onClick={() => {
-                        setMobileOpen(false);
-                        toggleTheme();
-                      }}
-                    >
-                      {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-                      {isDark ? "Switch to light mode" : "Switch to dark mode"}
                     </Button>
                     <Button
                       variant="ghost"

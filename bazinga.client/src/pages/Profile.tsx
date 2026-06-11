@@ -6,21 +6,18 @@ import {
   Laptop,
   LayoutDashboard,
   LogOut,
-  Moon,
   Pencil,
   Save,
   ShieldCheck,
   Smartphone,
-  Sun,
   UserCircle,
   Users,
 } from "lucide-react";
-import { useTheme } from "next-themes";
+// theme switching has been removed — dark is the only mode now
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -40,7 +37,6 @@ const Profile = () => {
   const { user, currentProfile, profiles, updateUser, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { theme, setTheme } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const initialSection = (searchParams.get("section") as SectionId) || "overview";
@@ -101,7 +97,6 @@ const Profile = () => {
   };
 
   const goHome = () => navigate("/");
-  const isDark = theme === "dark";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -217,31 +212,6 @@ const Profile = () => {
                   </div>
                 </form>
 
-                <div className="rounded-xl border border-border bg-card p-6 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {isDark ? (
-                      <Moon className="h-5 w-5 text-orange-400" />
-                    ) : (
-                      <Sun className="h-5 w-5 text-orange-500" />
-                    )}
-                    <div>
-                      <p className="font-semibold">Appearance</p>
-                      <p className="text-sm text-muted-foreground">
-                        Switch between day and night mode.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs uppercase tracking-wider text-muted-foreground">
-                      {isDark ? "Dark" : "Light"}
-                    </span>
-                    <Switch
-                      checked={isDark}
-                      onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
-                      aria-label="Toggle dark mode"
-                    />
-                  </div>
-                </div>
               </div>
             )}
 

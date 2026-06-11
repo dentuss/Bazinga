@@ -68,8 +68,20 @@ public class JikanService : IJikanService
 
     // ---------- Manga ------------------------------------------------------
 
+    /// <summary>
+    /// Genre IDs we want to keep off the public shelves regardless of `sfw=true`:
+    /// 9 = Ecchi, 12 = Hentai, 49 = Erotica, 28 = Boys Love, 30 = Girls Love.
+    /// Jikan's `sfw=true` only filters Hentai; everything else here is on the
+    /// borderline and shouldn't surface on a homepage shown to all users.
+    /// </summary>
+    private const string MangaExcludedGenres = "9,12,28,30,49";
+
     public Task<JikanPagedResponse<MangaDto>> TopMangaAsync(int page, int limit, CancellationToken ct) =>
-        GetPagedCached<JikanManga, MangaDto>($"top/manga?page={page}&limit={limit}", ListCacheTtl, MapManga, ct);
+        GetPagedCached<JikanManga, MangaDto>(
+            $"top/manga?page={page}&limit={limit}&sfw=true",
+            ListCacheTtl,
+            MapManga,
+            ct);
 
     public Task<JikanPagedResponse<MangaDto>> SearchMangaAsync(
         string? query, int page, int limit,
@@ -85,6 +97,7 @@ public class JikanService : IJikanService
             if (!string.IsNullOrWhiteSpace(status)) q["status"] = status;
             if (!string.IsNullOrWhiteSpace(orderBy)) q["order_by"] = orderBy;
             q["sfw"] = "true";
+            q["genres_exclude"] = MangaExcludedGenres;
         });
         return GetPagedCached<JikanManga, MangaDto>(url, ListCacheTtl, MapManga, ct);
     }
