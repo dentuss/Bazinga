@@ -1,0 +1,44 @@
+flowchart TB
+    classDef pres fill:#1d3a5f,stroke:#3b82f6,color:#fff,font-weight:bold
+    classDef biz fill:#3b1d1d,stroke:#E50914,color:#fff,font-weight:bold
+    classDef data fill:#2d1d3a,stroke:#a855f7,color:#fff,font-weight:bold
+    classDef infra fill:#1d3a2d,stroke:#22c55e,color:#fff,font-weight:bold
+
+    subgraph P[" Presentation Layer · React 18 + TypeScript "]
+        direction LR
+        P1[Pages]
+        P2[Components]
+        P3[React Context]
+    end
+    class P,P1,P2,P3 pres
+
+    subgraph B[" Business Logic Layer · ASP.NET Core 9 "]
+        direction LR
+        B1[Controllers × 13]
+        B2[Services × 8]
+        B3[DTOs]
+    end
+    class B,B1,B2,B3 biz
+
+    subgraph D[" Data Access Layer · EF Core 9 "]
+        direction LR
+        D1[AppDbContext]
+        D2[Entities × 18]
+    end
+    class D,D1,D2 data
+
+    subgraph I[" Infrastructure "]
+        direction LR
+        I1[(MySQL 8)]
+        I2[Stripe]
+        I3[Jikan · akabab · TVMaze]
+        I4[SMTP]
+    end
+    class I,I1,I2,I3,I4 infra
+
+    P -- "REST / JWT" --> B
+    B --> D
+    D --> I1
+    B -- HTTP --> I2
+    B -- HTTP --> I3
+    B -- SMTP --> I4

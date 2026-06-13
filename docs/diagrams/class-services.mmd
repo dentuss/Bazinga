@@ -1,0 +1,89 @@
+classDiagram
+    direction LR
+
+    class IEmailSender {
+        <<interface>>
+        +SendAsync(to, subject, html) Task
+    }
+    class SmtpEmailSender {
+        -EmailOptions _options
+        +SendAsync() Task
+    }
+    class LoggingEmailSender {
+        -ILogger _log
+        +SendAsync() Task
+    }
+    IEmailSender <|.. SmtpEmailSender
+    IEmailSender <|.. LoggingEmailSender
+
+    class IBillingService {
+        <<interface>>
+        +IsConfigured bool
+        +CreateSetupIntentAsync(email) SetupIntentResult
+    }
+    class StripeBillingService {
+        -StripeOptions _options
+        -HttpClient _http
+        +CreateSetupIntentAsync()
+    }
+    IBillingService <|.. StripeBillingService
+
+    class IJikanService {
+        <<interface>>
+        +TopMangaAsync()
+        +SearchMangaAsync()
+        +TopAnimeAsync()
+    }
+    class JikanService {
+        -IMemoryCache _cache
+        -HttpClient _http
+    }
+    IJikanService <|.. JikanService
+
+    class ISuperheroService {
+        <<interface>>
+        +ListAsync()
+        +GetByIdAsync()
+        +GetCuratedShowsAsync()
+    }
+    class SuperheroService {
+        -IMemoryCache _cache
+    }
+    ISuperheroService <|.. SuperheroService
+
+    class IPasswordHasher {
+        <<interface>>
+        +Hash(string) string
+        +Verify(plain, hash) bool
+    }
+    class BCryptPasswordHasher
+    IPasswordHasher <|.. BCryptPasswordHasher
+
+    class IJwtService {
+        <<interface>>
+        +GenerateToken(User) string
+    }
+    class JwtService
+    IJwtService <|.. JwtService
+
+    class AuthController {
+        +Register()
+        +Login()
+        +SignupCheck()
+        +SignupStart()
+        +SignupComplete()
+        +SignupBillingIntent()
+    }
+    AuthController ..> IEmailSender
+    AuthController ..> IBillingService
+    AuthController ..> IJwtService
+    AuthController ..> IPasswordHasher
+
+    class MetadataController {
+        +TopAnime()
+        +SearchManga()
+        +Superheroes()
+        +SuperheroShows()
+    }
+    MetadataController ..> IJikanService
+    MetadataController ..> ISuperheroService
