@@ -1,0 +1,25 @@
+flowchart LR
+    classDef browser fill:#1d3a5f,stroke:#3b82f6,color:#fff
+    classDef internal fill:#3b1d1d,stroke:#E50914,color:#fff,font-weight:bold
+    classDef data fill:#2d1d3a,stroke:#a855f7,color:#fff
+    classDef external fill:#1d3a2d,stroke:#22c55e,color:#fff
+
+    U([Користувач<br/>Browser]):::browser
+    SPA[SPA<br/>React 18 + Vite<br/>NGINX]:::internal
+    API[REST API<br/>ASP.NET Core 9]:::internal
+    DB[(MySQL 8<br/>EF Core)]:::data
+
+    STRIPE([Stripe<br/>SetupIntent]):::external
+    SMTP([SMTP<br/>MailKit]):::external
+    JIKAN([Jikan v4<br/>MyAnimeList]):::external
+    AKABAB([akabab<br/>superhero-api]):::external
+    TVMAZE([TVMaze]):::external
+
+    U -- HTTPS --> SPA
+    SPA -- "/api/* JWT" --> API
+    API -- "EF Core" --> DB
+    API -- "платежі" --> STRIPE
+    API -- "magic link" --> SMTP
+    API -- "аніме/манга" --> JIKAN
+    API -- "персонажі" --> AKABAB
+    API -- "серіали" --> TVMAZE

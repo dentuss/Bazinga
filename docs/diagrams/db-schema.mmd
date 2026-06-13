@@ -1,0 +1,56 @@
+erDiagram
+    USERS ||--o{ PROFILES : "має до 5"
+    USERS ||--o| CARTS : "1 кошик"
+    USERS ||--o| WISHLISTS : "1 список"
+    USERS ||--o| LIBRARIES : "1 бібліотека"
+    USERS ||--o{ ORDERS : "робить"
+    USERS ||--o{ REVIEWS : "пише"
+    USERS ||--o{ NEWS_POSTS : "публікує (admin)"
+
+    SIGNUP_TOKENS }o..|| USERS : "→ створює"
+
+    CARTS ||--o{ CART_ITEMS : "містить"
+    WISHLISTS ||--o{ WISHLIST_ITEMS : "містить"
+    LIBRARIES ||--o{ LIBRARY_ITEMS : "містить"
+
+    COMICS ||--o{ CART_ITEMS : "у кошику"
+    COMICS ||--o{ WISHLIST_ITEMS : "збережено"
+    COMICS ||--o{ LIBRARY_ITEMS : "придбано"
+    COMICS ||--o{ REVIEWS : "оцінено"
+    CATEGORIES ||--o{ COMICS : "група"
+    CONDITIONS ||--o{ COMICS : "стан"
+
+    USERS {
+        bigint id PK
+        string username UK
+        string email UK
+        string password_hash
+        string role
+        string subscription_type
+        date subscription_expiration
+    }
+
+    PROFILES {
+        bigint id PK
+        bigint user_id FK
+        string name
+        string avatar_color
+        bool is_root
+        bool is_kids
+    }
+
+    SIGNUP_TOKENS {
+        bigint id PK
+        string email
+        string token_hash UK
+        datetime expires_at
+        datetime consumed_at
+    }
+
+    COMICS {
+        bigint id PK
+        string title
+        decimal price
+        bigint category_id FK
+        bigint condition_id FK
+    }
