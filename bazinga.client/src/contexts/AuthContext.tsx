@@ -10,6 +10,7 @@ import {
 } from "@/lib/profiles";
 import type { SignupPlan } from "@/lib/signup";
 import { isPaidSubscription, isTrialExpired } from "@/data/subscriptionPlans";
+import { updateAccount as apiUpdateAccount, type UpdateAccountInput } from "@/lib/auth";
 
 type AuthUser = {
   id: number;
@@ -20,6 +21,7 @@ type AuthUser = {
   firstName?: string;
   lastName?: string;
   dateOfBirth?: string;
+  phone?: string;
   subscriptionType?: string;
   subscriptionExpiration?: string;
   createdAt?: string;
@@ -36,6 +38,7 @@ type AuthApiResponse = {
   firstName?: string;
   lastName?: string;
   dateOfBirth?: string;
+  phone?: string;
   subscriptionType?: string;
   subscriptionExpiration?: string;
   createdAt?: string;
@@ -59,6 +62,8 @@ type AuthContextType = {
     paymentMethodId?: string | null
   ) => Promise<void>;
   updateUser: (updates: Partial<AuthUser>) => void;
+  updateAccount: (input: UpdateAccountInput) => Promise<void>;
+  consumeSigninToken: (verifyToken: () => Promise<AuthApiResponse>) => Promise<void>;
   logout: () => void;
   refreshProfiles: () => Promise<void>;
   selectProfile: (id: number) => void;
@@ -143,6 +148,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       firstName: payload.firstName,
       lastName: payload.lastName,
       dateOfBirth: payload.dateOfBirth,
+      phone: payload.phone,
       subscriptionType: payload.subscriptionType,
       subscriptionExpiration: payload.subscriptionExpiration,
       createdAt: payload.createdAt ?? now,
@@ -150,6 +156,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
     // Force the "Who's watching?" prompt on a fresh sign-in.
     setCurrentProfileId(null);
+  };
+
+  /** Used by /signin/verify after the magic link is exchanged for a JWT. */
+  const consumeSigninToken = async (verifyToken: () => Promise<AuthApiResponse>) => {
+    const response = await verifyToken();
+    handleAuth(response.token, response);
+  };
+
+  const updateAccount = async (input: UpdateAccountInput) => {
+    if (!token) throw new Error("Not authenticated");
+    const response = await apiUpdateAccount(token, input);
+    handleAuth(response.token, response);
   };
 
   const login = async (email: string, password: string) => {
@@ -226,6 +244,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         register,
         completeSignup,
         updateUser: (updates) => setUser((prev) => (prev ? { ...prev, ...updates } : prev)),
+        updateAccount,
+        consumeSigninToken,
         logout,
         refreshProfiles,
         selectProfile,

@@ -34,13 +34,14 @@ const sections: { id: SectionId; label: string; icon: typeof LayoutDashboard }[]
 ];
 
 const Profile = () => {
-  const { user, currentProfile, profiles, updateUser, logout } = useAuth();
+  const { user, currentProfile, profiles, updateAccount, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const initialSection = (searchParams.get("section") as SectionId) || "overview";
   const [section, setSection] = useState<SectionId>(initialSection);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("section") !== section) {
@@ -56,7 +57,7 @@ const Profile = () => {
     firstName: "",
     lastName: "",
     dateOfBirth: "",
-    password: "",
+    phone: "",
   });
 
   useEffect(() => {
@@ -67,7 +68,7 @@ const Profile = () => {
       firstName: user.firstName ?? "",
       lastName: user.lastName ?? "",
       dateOfBirth: user.dateOfBirth ?? "",
-      password: "",
+      phone: user.phone ?? "",
     });
   }, [user]);
 
@@ -78,17 +79,26 @@ const Profile = () => {
       setFormState((prev) => ({ ...prev, [field]: event.target.value }));
     };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    updateUser({
-      username: formState.username.trim(),
-      email: formState.email.trim(),
-      firstName: formState.firstName.trim(),
-      lastName: formState.lastName.trim(),
-      dateOfBirth: formState.dateOfBirth,
-    });
-    setFormState((prev) => ({ ...prev, password: "" }));
-    toast({ title: "Account updated", description: "Your account details have been saved." });
+    setSaving(true);
+    try {
+      await updateAccount({
+        firstName: formState.firstName.trim(),
+        lastName: formState.lastName.trim(),
+        dateOfBirth: formState.dateOfBirth || null,
+        phone: formState.phone.trim(),
+      });
+      toast({ title: "Account updated", description: "Your account details have been saved." });
+    } catch (err) {
+      toast({
+        title: "Could not save changes",
+        description: err instanceof Error ? err.message : "Try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleLogout = () => {
@@ -197,17 +207,20 @@ const Profile = () => {
                 <form onSubmit={handleSubmit} className="rounded-xl border border-border bg-card p-6 space-y-4">
                   <h2 className="text-lg font-bold">Account details</h2>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field id="profile-username" label="Username" value={formState.username} onChange={handleChange("username")} required />
-                    <Field id="profile-email" label="Email" type="email" value={formState.email} onChange={handleChange("email")} required />
+                    <Field id="profile-username" label="Username" value={formState.username} onChange={() => undefined} disabled />
+                    <Field id="profile-email" label="Email" type="email" value={formState.email} onChange={() => undefined} disabled />
                     <Field id="profile-first" label="First name" value={formState.firstName} onChange={handleChange("firstName")} />
                     <Field id="profile-last" label="Last name" value={formState.lastName} onChange={handleChange("lastName")} />
                     <Field id="profile-dob" label="Date of birth" type="date" value={formState.dateOfBirth} onChange={handleChange("dateOfBirth")} />
-                    <Field id="profile-pass" label="New password" type="password" value={formState.password} onChange={handleChange("password")} placeholder="Leave blank to keep current" />
+                    <Field id="profile-phone" label="Phone number" type="tel" value={formState.phone} onChange={handleChange("phone")} placeholder="+1 555 123 4567" />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Username and email are tied to your account. To change them, contact support.
+                  </p>
                   <div className="flex flex-wrap gap-3">
-                    <Button type="submit" className="gap-2">
+                    <Button type="submit" className="gap-2" disabled={saving}>
                       <Save className="h-4 w-4" />
-                      Save changes
+                      {saving ? "Saving…" : "Save changes"}
                     </Button>
                   </div>
                 </form>
@@ -254,9 +267,44 @@ const Profile = () => {
                 <p className="text-sm text-muted-foreground">Account credentials and access.</p>
 
                 <div className="rounded-xl border border-border bg-card divide-y divide-border">
-                  <SecurityRow icon={<ShieldCheck className="h-5 w-5" />} label="Password" value="••••••••" />
+                  <SecurityRow
+                    icon={<ShieldCheck className="h-5 w-5" />}
+                    label="Password"
+                    value="••••••••"
+                    action={
+                      <Link to="/forgot-password">
+                        <Button variant="outline" size="sm">Change password</Button>
+                      </Link>
+                    }
+                  />
                   <SecurityRow icon={<UserCircle className="h-5 w-5" />} label="Email" value={user.email} />
-                  <SecurityRow icon={<Smartphone className="h-5 w-5" />} label="Phone number" value="Not set" />
+                  <SecurityRow
+                    icon={<Smartphone className="h-5 w-5" />}
+                    label="Phone number"
+                    value={user.phone || "Not set"}
+                    action={
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSection("overview")}
+                      >
+                        {user.phone ? "Update" : "Add"}
+                      </Button>
+                    }
+                  />
+                </div>
+
+                <div className="rounded-xl border border-border bg-card p-6">
+                  <h2 className="font-bold mb-2">Profile PINs</h2>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Lock any profile behind a 4-digit PIN so only the right person can switch into it.
+                  </p>
+                  <Link to="/profiles/manage">
+                    <Button variant="outline" className="gap-2">
+                      <Pencil className="h-4 w-4" />
+                      Manage profile PINs
+                    </Button>
+                  </Link>
                 </div>
               </div>
             )}
@@ -336,6 +384,7 @@ const Field = ({
   type = "text",
   required,
   placeholder,
+  disabled,
 }: {
   id: string;
   label: string;
@@ -344,20 +393,32 @@ const Field = ({
   type?: string;
   required?: boolean;
   placeholder?: string;
+  disabled?: boolean;
 }) => (
   <div className="grid gap-2">
     <Label htmlFor={id}>{label}</Label>
-    <Input id={id} type={type} value={value} onChange={onChange} required={required} placeholder={placeholder} />
+    <Input id={id} type={type} value={value} onChange={onChange} required={required} placeholder={placeholder} disabled={disabled} />
   </div>
 );
 
-const SecurityRow = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
+const SecurityRow = ({
+  icon,
+  label,
+  value,
+  action,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  action?: React.ReactNode;
+}) => (
   <div className="flex items-center gap-4 p-4">
     <div className="text-muted-foreground">{icon}</div>
     <div className="flex-1">
       <p className="font-semibold">{label}</p>
       <p className="text-sm text-muted-foreground">{value}</p>
     </div>
+    {action}
   </div>
 );
 

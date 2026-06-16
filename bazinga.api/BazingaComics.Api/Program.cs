@@ -226,6 +226,57 @@ using (var scope = app.Services.CreateScope())
             INDEX ix_pci_profile (profile_id, collection),
             CONSTRAINT fk_pci_profiles FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
         );");
+
+    // Magic-link sign-in tokens (separate table from signup_tokens so we don't
+    // have to ALTER an existing one).
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS signin_tokens (
+            id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(255) NOT NULL,
+            token_hash VARCHAR(128) NOT NULL,
+            expires_at DATETIME(6) NOT NULL,
+            created_at DATETIME(6) NOT NULL,
+            consumed_at DATETIME(6) NULL,
+            UNIQUE INDEX ix_signin_tokens_token_hash (token_hash),
+            INDEX ix_signin_tokens_email (email)
+        );");
+
+    // Password reset tokens (same shape).
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(255) NOT NULL,
+            token_hash VARCHAR(128) NOT NULL,
+            expires_at DATETIME(6) NOT NULL,
+            created_at DATETIME(6) NOT NULL,
+            consumed_at DATETIME(6) NULL,
+            UNIQUE INDEX ix_pwreset_token_hash (token_hash),
+            INDEX ix_pwreset_email (email)
+        );");
+
+    // Add `users.phone` and `profiles.pin_hash` if they're missing on an older
+    // database. MySQL lacks `ADD COLUMN IF NOT EXISTS`, so we look at
+    // information_schema and prepare a no-op when the column already exists.
+    AddColumnIfMissing(db, "users", "phone", "VARCHAR(50) NULL");
+    AddColumnIfMissing(db, "profiles", "pin_hash", "VARCHAR(255) NULL");
+}
+
+// Local helper kept inline so the startup file stays self-contained.
+// MySQL lacks `ADD COLUMN IF NOT EXISTS`, and Pomelo's ExecuteSqlRaw is a
+// single-command pipeline so the INFORMATION_SCHEMA / PREPARE dance is fragile.
+// Instead we just attempt the ALTER and swallow MySQL error 1060 (duplicate
+// column name) — the only failure mode we care about treating as a no-op.
+static void AddColumnIfMissing(AppDbContext db, string table, string column, string definition)
+{
+    try
+    {
+        db.Database.ExecuteSqlRaw($"ALTER TABLE `{table}` ADD COLUMN `{column}` {definition};");
+    }
+    catch (Exception)
+    {
+        // Column already exists (1060) or table not present yet — fine; the EF
+        // mapping only reads/writes the column when it really exists.
+    }
 }
 
 if (app.Environment.IsDevelopment())

@@ -14,6 +14,7 @@ public class User
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public DateOnly? DateOfBirth { get; set; }
+    public string? Phone { get; set; }
     public string? Role { get; set; }
     public string? SubscriptionType { get; set; } = "Free";
     public DateOnly? SubscriptionExpiration { get; set; }

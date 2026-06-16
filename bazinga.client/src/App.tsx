@@ -9,6 +9,9 @@ import { CollectionsProvider } from "@/contexts/CollectionsContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import SigninVerify from "./pages/SigninVerify";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Wishlist from "./pages/Wishlist";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
@@ -100,6 +103,9 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<RootGate />} />
                 <Route path="/auth" element={<Auth />} />
+                <Route path="/signin/verify" element={<SigninVerify />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
 
                 <Route path="/signup/review" element={<SignUpReview />} />
                 <Route path="/signup/check-email" element={<SignUpCheckEmail />} />

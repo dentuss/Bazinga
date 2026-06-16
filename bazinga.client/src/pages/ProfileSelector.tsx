@@ -1,13 +1,18 @@
+import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
-import { Pencil, Plus } from "lucide-react";
+import { Lock, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ProfileAvatar from "@/components/ProfileAvatar";
+import PinEntryModal from "@/components/PinEntryModal";
 import { useAuth } from "@/contexts/AuthContext";
-import { MAX_PROFILES_PER_ACCOUNT } from "@/lib/profiles";
+import { MAX_PROFILES_PER_ACCOUNT, verifyProfilePin, type Profile } from "@/lib/profiles";
 
 const ProfileSelector = () => {
   const navigate = useNavigate();
-  const { user, profiles, profilesLoading, selectProfile, logout } = useAuth();
+  const { user, profiles, profilesLoading, selectProfile, logout, token } = useAuth();
+  const [pinFor, setPinFor] = useState<Profile | null>(null);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
 
   // The AuthProvider already kicks off the profile fetch as soon as the token
   // shows up — re-triggering it here was double-firing the call in StrictMode
@@ -17,9 +22,31 @@ const ProfileSelector = () => {
 
   const canAdd = profiles.length < MAX_PROFILES_PER_ACCOUNT;
 
-  const handlePick = (id: number) => {
-    selectProfile(id);
+  const handlePick = (profile: Profile) => {
+    if (profile.hasPin) {
+      setPinError(null);
+      setPinFor(profile);
+      return;
+    }
+    selectProfile(profile.id);
     navigate("/", { replace: true });
+  };
+
+  const handlePinSubmit = async (pin: string) => {
+    if (!pinFor || !token) return;
+    setPinBusy(true);
+    setPinError(null);
+    try {
+      await verifyProfilePin(token, pinFor.id, pin);
+      const id = pinFor.id;
+      setPinFor(null);
+      selectProfile(id);
+      navigate("/", { replace: true });
+    } catch (err) {
+      setPinError(err instanceof Error && err.message ? err.message : "Incorrect PIN.");
+    } finally {
+      setPinBusy(false);
+    }
   };
 
   const handleSignOut = () => {
@@ -50,7 +77,7 @@ const ProfileSelector = () => {
                 <button
                   key={profile.id}
                   type="button"
-                  onClick={() => handlePick(profile.id)}
+                  onClick={() => handlePick(profile)}
                   className="group flex flex-col items-center gap-3 outline-none"
                   aria-label={`Continue as ${profile.name}`}
                 >
@@ -69,6 +96,15 @@ const ProfileSelector = () => {
                     {profile.isKids && (
                       <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-orange-500 text-black text-[10px] font-black uppercase tracking-wider px-2 py-0.5 shadow">
                         Kids
+                      </span>
+                    )}
+                    {profile.hasPin && (
+                      <span
+                        className="absolute -bottom-2 -right-2 h-7 w-7 rounded-full bg-black/80 grid place-items-center border border-primary/60 shadow"
+                        aria-label="PIN protected"
+                        title="PIN protected"
+                      >
+                        <Lock className="h-3.5 w-3.5 text-primary" />
                       </span>
                     )}
                   </div>
@@ -108,6 +144,19 @@ const ProfileSelector = () => {
           </div>
         </div>
       </main>
+
+      <PinEntryModal
+        open={pinFor !== null}
+        title={pinFor ? `${pinFor.name}'s PIN` : "Enter PIN"}
+        description="This profile is locked. Enter the 4-digit PIN to continue."
+        busy={pinBusy}
+        error={pinError}
+        onSubmit={handlePinSubmit}
+        onClose={() => {
+          setPinFor(null);
+          setPinError(null);
+        }}
+      />
     </div>
   );
 };

@@ -150,6 +150,7 @@ const RowChrome = ({
   title,
   badge,
   exploreLabel,
+  exploreHref,
   children,
   id,
   loading,
@@ -159,6 +160,8 @@ const RowChrome = ({
   title: string;
   badge?: React.ReactNode;
   exploreLabel?: string;
+  /** Optional destination for the "Explore all" affordance. */
+  exploreHref?: string;
   id: string;
   loading?: boolean;
   empty?: boolean;
@@ -173,9 +176,19 @@ const RowChrome = ({
         {title}
       </h3>
       {exploreLabel && (
-        <span className="text-xs font-semibold uppercase tracking-widest text-orange-500/80">
-          {exploreLabel}
-        </span>
+        exploreHref ? (
+          <Link
+            to={exploreHref}
+            className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-widest text-orange-500 hover:text-orange-400 transition-colors"
+          >
+            {exploreLabel}
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        ) : (
+          <span className="text-xs font-semibold uppercase tracking-widest text-orange-500/80">
+            {exploreLabel}
+          </span>
+        )
       )}
     </div>
     <div className="relative group/row">
@@ -229,6 +242,8 @@ const ShowRow = ({
   loading,
   badge,
   exploreLabel = "Explore all",
+  exploreHref = "/bazinga-tv/anime",
+  rows = 2,
 }: {
   title: string;
   items: AnimeDto[];
@@ -236,12 +251,16 @@ const ShowRow = ({
   loading?: boolean;
   badge?: React.ReactNode;
   exploreLabel?: string;
+  exploreHref?: string;
+  rows?: 1 | 2;
 }) => (
   <RowChrome
     id={railId(title)}
     title={title}
     badge={badge}
     exploreLabel={exploreLabel}
+    exploreHref={exploreHref}
+    rows={rows}
     loading={loading}
     empty={!loading && items.length === 0}
   >
@@ -283,7 +302,7 @@ const ContinueWatchingRow = ({
         </button>
         <div
           id={id}
-          className="grid grid-rows-2 grid-flow-col auto-cols-max gap-x-3 gap-y-4 md:gap-x-4 overflow-x-auto px-4 md:px-8 pb-6 pt-2 scroll-smooth no-scrollbar"
+          className="flex gap-3 md:gap-4 overflow-x-auto px-4 md:px-8 pb-6 pt-2 scroll-smooth snap-x snap-mandatory no-scrollbar"
           style={{ scrollbarWidth: "none" }}
         >
           {items.map((item, idx) => {
@@ -550,6 +569,7 @@ const BazingaTV = () => {
           items={seasonNow.data?.data ?? []}
           onSelect={(s) => setSelectedShow(s)}
           loading={seasonNow.isLoading}
+          rows={1}
         />
         <SuperheroShowsSection />
         <ShowRow

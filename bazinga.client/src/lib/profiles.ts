@@ -9,6 +9,7 @@ export type Profile = {
   avatarIcon?: string | null;
   isRoot: boolean;
   isKids: boolean;
+  hasPin?: boolean;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -68,3 +69,44 @@ export const updateProfile = (token: string, id: number, body: ProfileUpsertRequ
 
 export const deleteProfile = (token: string, id: number) =>
   apiFetch<unknown>(`/api/profiles/${id}`, { method: "DELETE", authToken: token });
+
+const profileHeader = (callerProfileId: number | null | undefined): Record<string, string> =>
+  callerProfileId != null ? { "X-Profile-Id": String(callerProfileId) } : {};
+
+export const setProfilePin = (
+  token: string,
+  id: number,
+  pin: string,
+  currentPin: string | undefined,
+  callerProfileId: number | null
+) =>
+  apiFetch<unknown>(`/api/profiles/${id}/pin`, {
+    method: "PUT",
+    authToken: token,
+    headers: profileHeader(callerProfileId),
+    body: JSON.stringify({ pin, currentPin: currentPin ?? null }),
+  });
+
+export const removeProfilePin = (
+  token: string,
+  id: number,
+  currentPin: string | undefined,
+  callerProfileId: number | null
+) =>
+  apiFetch<unknown>(`/api/profiles/${id}/pin`, {
+    method: "DELETE",
+    authToken: token,
+    headers: profileHeader(callerProfileId),
+    body: JSON.stringify({ currentPin: currentPin ?? null }),
+  });
+
+export const verifyProfilePin = (
+  token: string,
+  id: number,
+  pin: string
+) =>
+  apiFetch<unknown>(`/api/profiles/${id}/verify-pin`, {
+    method: "POST",
+    authToken: token,
+    body: JSON.stringify({ pin }),
+  });

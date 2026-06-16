@@ -10,6 +10,8 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Entities.Profile> Profiles => Set<Entities.Profile>();
     public DbSet<SignupToken> SignupTokens => Set<SignupToken>();
+    public DbSet<SigninToken> SigninTokens => Set<SigninToken>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<Comic> Comics => Set<Comic>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<ComicCondition> Conditions => Set<ComicCondition>();
@@ -38,6 +40,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.FirstName).HasColumnName("first_name").HasMaxLength(100);
             e.Property(x => x.LastName).HasColumnName("last_name").HasMaxLength(100);
             e.Property(x => x.DateOfBirth).HasColumnName("date_of_birth");
+            e.Property(x => x.Phone).HasColumnName("phone").HasMaxLength(50);
             e.Property(x => x.Role).HasColumnName("role").HasMaxLength(50);
             e.Property(x => x.SubscriptionType).HasColumnName("subscription_type").HasMaxLength(20);
             e.Property(x => x.SubscriptionExpiration).HasColumnName("subscription_expiration");
@@ -61,6 +64,32 @@ public class AppDbContext : DbContext
             e.HasIndex(x => x.Email);
         });
 
+        b.Entity<SigninToken>(e =>
+        {
+            e.ToTable("signin_tokens");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Email).HasColumnName("email").HasMaxLength(255).IsRequired();
+            e.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(128).IsRequired();
+            e.Property(x => x.ExpiresAt).HasColumnName("expires_at").IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.ConsumedAt).HasColumnName("consumed_at");
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasIndex(x => x.Email);
+        });
+
+        b.Entity<PasswordResetToken>(e =>
+        {
+            e.ToTable("password_reset_tokens");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Email).HasColumnName("email").HasMaxLength(255).IsRequired();
+            e.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(128).IsRequired();
+            e.Property(x => x.ExpiresAt).HasColumnName("expires_at").IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.ConsumedAt).HasColumnName("consumed_at");
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasIndex(x => x.Email);
+        });
+
         b.Entity<Entities.Profile>(e =>
         {
             e.ToTable("profiles");
@@ -72,6 +101,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.AvatarIcon).HasColumnName("avatar_icon").HasMaxLength(20);
             e.Property(x => x.IsRoot).HasColumnName("is_root").HasDefaultValue(false);
             e.Property(x => x.IsKids).HasColumnName("is_kids").HasDefaultValue(false);
+            e.Property(x => x.PinHash).HasColumnName("pin_hash").HasMaxLength(255);
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.HasIndex(x => x.UserId);
