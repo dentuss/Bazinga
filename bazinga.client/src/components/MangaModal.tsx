@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, X } from "lucide-react";
+import { BookOpen, Heart, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchManga, mangaMetaLine, type MangaDto } from "@/lib/metadata";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCollections } from "@/contexts/CollectionsContext";
 
 interface MangaModalProps {
   manga: MangaDto;
@@ -9,12 +11,25 @@ interface MangaModalProps {
 }
 
 const MangaModal = ({ manga, onClose }: MangaModalProps) => {
+  const { token } = useAuth();
+  const { isSaved, toggle } = useCollections();
   const { data: detail } = useQuery({
     queryKey: ["manga-detail", manga.malId],
     queryFn: () => fetchManga(manga.malId),
     staleTime: 60 * 60 * 1000,
   });
   const full = detail ?? manga;
+  const inLibrary = isSaved("library", "manga", String(full.malId));
+
+  const handleLibraryToggle = () =>
+    void toggle("library", {
+      kind: "manga",
+      contentId: String(full.malId),
+      title: full.title,
+      image: full.largeImageUrl ?? full.imageUrl ?? null,
+      subtitle: full.authors.join(", ") || (full.type ?? "Manga"),
+      payload: full,
+    });
 
   return (
     <div
@@ -78,7 +93,16 @@ const MangaModal = ({ manga, onClose }: MangaModalProps) => {
               <Button className="bg-primary text-primary-foreground hover:bg-primary/90 transition-transform hover:scale-[1.03]">
                 <BookOpen className="h-4 w-4" /> Read Now
               </Button>
-              <Button variant="outline">Add to wishlist</Button>
+              {token && (
+                <Button
+                  variant="outline"
+                  onClick={handleLibraryToggle}
+                  className={inLibrary ? "border-primary bg-primary/10 text-primary hover:bg-primary/20" : ""}
+                >
+                  <Heart className={`h-4 w-4 ${inLibrary ? "fill-current text-primary" : ""}`} />
+                  {inLibrary ? "In Library" : "Add to Library"}
+                </Button>
+              )}
             </div>
             <p className="text-[11px] text-muted-foreground">
               Discovery data from{" "}

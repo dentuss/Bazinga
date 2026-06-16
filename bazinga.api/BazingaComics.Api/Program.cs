@@ -207,6 +207,25 @@ using (var scope = app.Services.CreateScope())
             UNIQUE INDEX ix_signup_tokens_token_hash (token_hash),
             INDEX ix_signup_tokens_email (email)
         );");
+
+    // Per-profile collections (Comics "Library" + BazingaTV "My List"). Added
+    // after the original schema, so create it idempotently for existing DBs.
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS profile_collection_items (
+            id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            profile_id BIGINT NOT NULL,
+            collection VARCHAR(20) NOT NULL,
+            kind VARCHAR(20) NOT NULL,
+            content_id VARCHAR(100) NOT NULL,
+            title VARCHAR(300) NOT NULL,
+            image VARCHAR(1000) NULL,
+            subtitle VARCHAR(500) NULL,
+            payload_json LONGTEXT NULL,
+            added_at DATETIME(6) NOT NULL,
+            UNIQUE INDEX ux_pci_unique (profile_id, collection, kind, content_id),
+            INDEX ix_pci_profile (profile_id, collection),
+            CONSTRAINT fk_pci_profiles FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+        );");
 }
 
 if (app.Environment.IsDevelopment())

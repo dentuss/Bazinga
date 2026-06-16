@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Loader2, Search, Sparkles, X } from "lucide-react";
 import {
   fetchSuperheroes,
+  searchAnime,
   searchManga,
   superheroSubtitle,
+  type AnimeDto,
   type MangaDto,
   type SuperheroDto,
 } from "@/lib/metadata";
@@ -16,6 +19,7 @@ import {
 import MangaModal from "@/components/MangaModal";
 import HeroModal from "@/components/HeroModal";
 import ComicModal from "@/components/ComicModal";
+import AnimeModal from "@/components/AnimeModal";
 import { cn } from "@/lib/utils";
 
 interface MasterSearchProps {
@@ -23,7 +27,7 @@ interface MasterSearchProps {
   onClose: () => void;
 }
 
-const PROMPTS = ["Berserk", "Spider-Man", "Night Cipher"] as const;
+const PROMPTS = ["Berserk", "Spider-Man", "Cowboy Bebop"] as const;
 
 const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
   const navigate = useNavigate();
@@ -35,6 +39,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
   const [openComic, setOpenComic] = useState<PlaceholderComic | null>(null);
   const [openHero, setOpenHero] = useState<SuperheroDto | null>(null);
   const [openManga, setOpenManga] = useState<MangaDto | null>(null);
+  const [openAnime, setOpenAnime] = useState<AnimeDto | null>(null);
 
   // Reset on close; bind Escape while open.
   useEffect(() => {
@@ -44,6 +49,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
       setOpenComic(null);
       setOpenHero(null);
       setOpenManga(null);
+      setOpenAnime(null);
       return;
     }
     const onKey = (e: KeyboardEvent) => {
@@ -52,12 +58,13 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
         if (openComic) return setOpenComic(null);
         if (openHero) return setOpenHero(null);
         if (openManga) return setOpenManga(null);
+        if (openAnime) return setOpenAnime(null);
         onClose();
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose, openComic, openHero, openManga]);
+  }, [open, onClose, openComic, openHero, openManga, openAnime]);
 
   // Debounce typing.
   useEffect(() => {
@@ -79,43 +86,55 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
       .slice(0, 5);
   }, [debounced]);
 
+  const enabled = debounced.length > 1;
+
   const heroes = useQuery({
     queryKey: ["master-search:characters", debounced],
     queryFn: () => fetchSuperheroes({ q: debounced, limit: 5 }),
-    enabled: debounced.length > 1,
+    enabled,
     staleTime: 60 * 1000,
   });
 
   const manga = useQuery({
     queryKey: ["master-search:manga", debounced],
     queryFn: () => searchManga({ q: debounced, limit: 5 }),
-    enabled: debounced.length > 1,
+    enabled,
     staleTime: 60 * 1000,
   });
 
-  if (!open) return null;
+  const anime = useQuery({
+    queryKey: ["master-search:anime", debounced],
+    queryFn: () => searchAnime({ q: debounced, limit: 5 }),
+    enabled,
+    staleTime: 60 * 1000,
+  });
 
-  const totalLoading = heroes.isFetching || manga.isFetching;
+  const totalLoading = heroes.isFetching || manga.isFetching || anime.isFetching;
   const heroHits = heroes.data?.data ?? [];
   const mangaHits = manga.data?.data ?? [];
+  const animeHits = anime.data?.data ?? [];
   const empty =
-    debounced.length > 1 &&
+    enabled &&
     !totalLoading &&
     comicMatches.length === 0 &&
     heroHits.length === 0 &&
-    mangaHits.length === 0;
+    mangaHits.length === 0 &&
+    animeHits.length === 0;
 
-  const goToFiltered = (target: "comics" | "characters" | "manga") => {
+  const goToFiltered = (target: "comics" | "characters" | "manga" | "anime") => {
     const q = encodeURIComponent(debounced);
     onClose();
     if (target === "comics") navigate(`/comics/all?search=${q}`);
     else if (target === "characters") navigate(`/characters?q=${q}`);
-    else navigate(`/manga?q=${q}`);
+    else if (target === "manga") navigate(`/manga?q=${q}`);
+    else navigate(`/bazinga-tv/anime?q=${q}`);
   };
 
-  return (
+  if (!open) return null;
+
+  const overlay = (
     <div
-      className="fixed inset-0 z-[90] bg-black/90 backdrop-blur-md flex flex-col overflow-hidden animate-fade-in"
+      className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex flex-col overflow-hidden animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-label="Search Bazinga"
@@ -146,7 +165,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search comics, characters, manga…"
+            placeholder="Search comics, characters, manga, anime…"
             className="w-full h-14 md:h-16 rounded-xl bg-card border-2 border-border pl-12 pr-12 text-base md:text-lg font-semibold outline-none focus:border-primary focus:shadow-[0_0_30px_hsl(0_82%_55%/0.3)] transition-all placeholder:text-muted-foreground/70"
           />
           {query ? (
@@ -231,6 +250,25 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
                 ))}
               </Section>
             )}
+            {animeHits.length > 0 && (
+              <Section
+                title="Anime"
+                count={animeHits.length}
+                tone="orange"
+                onSeeAll={() => goToFiltered("anime")}
+              >
+                {animeHits.map((a: AnimeDto) => (
+                  <Result
+                    key={a.malId}
+                    image={a.imageUrl ?? a.largeImageUrl ?? ""}
+                    title={a.title}
+                    subtitle={a.year ? `Anime · ${a.year}` : "Anime"}
+                    badge={a.score ? `★ ${a.score.toFixed(1)}` : undefined}
+                    onClick={() => setOpenAnime(a)}
+                  />
+                ))}
+              </Section>
+            )}
             {heroHits.length > 0 && (
               <Section
                 title="Characters"
@@ -286,35 +324,52 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
             image: openComic.image,
             creators: openComic.creators,
             description: openComic.description,
+            series: openComic.series,
           }}
         />
       )}
       {openHero && <HeroModal hero={openHero} onClose={() => setOpenHero(null)} />}
       {openManga && <MangaModal manga={openManga} onClose={() => setOpenManga(null)} />}
+      {openAnime && <AnimeModal anime={openAnime} onClose={() => setOpenAnime(null)} />}
     </div>
   );
+
+  // Portal to the document body so the overlay is never clipped by an ancestor
+  // that establishes a containing block (the sticky, backdrop-blurred header)
+  // — that clipping was why the search appeared not to open.
+  return createPortal(overlay, document.body);
 };
 
 const Section = ({
   title,
   count,
   onSeeAll,
+  tone = "red",
   children,
 }: {
   title: string;
   count: number;
   onSeeAll: () => void;
+  tone?: "red" | "orange";
   children: React.ReactNode;
 }) => (
   <div>
     <div className="flex items-center justify-between mb-3">
-      <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-primary">
+      <h3
+        className={cn(
+          "text-xs font-bold uppercase tracking-[0.3em]",
+          tone === "orange" ? "text-orange-500" : "text-primary"
+        )}
+      >
         {title} <span className="text-muted-foreground ml-1">({count})</span>
       </h3>
       <button
         type="button"
         onClick={onSeeAll}
-        className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
+        className={cn(
+          "text-xs font-semibold hover:underline inline-flex items-center gap-1",
+          tone === "orange" ? "text-orange-500" : "text-primary"
+        )}
       >
         See all
         <ArrowRight className="h-3 w-3" />
