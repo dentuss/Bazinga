@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Loader2, Play, Plus } from "lucide-react";
 import ShowModal from "@/components/ShowModal";
@@ -34,9 +35,13 @@ const SuperheroShowsSection = () => {
           </span>
           Superhero Shows
         </h3>
-        <span className="text-xs font-semibold uppercase tracking-widest text-orange-500/80">
-          Live action via TVMaze
-        </span>
+        <Link
+          to="/bazinga-tv/series"
+          className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-widest text-orange-500 hover:text-orange-400 transition-colors"
+        >
+          Explore all
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
       <div className="relative group/row">
         <button

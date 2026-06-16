@@ -1,7 +1,9 @@
+using System.Text.RegularExpressions;
 using BazingaComics.Api.Data;
 using BazingaComics.Api.Dtos;
 using BazingaComics.Api.Entities;
 using BazingaComics.Api.Security;
+using BazingaComics.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,10 +17,16 @@ public class ProfilesController : ControllerBase
 {
     private const int MaxProfilesPerUser = 5;
     private const string DefaultAvatarColor = "#E50914";
+    private static readonly Regex PinFormat = new("^[0-9]{4}$", RegexOptions.Compiled);
 
     private readonly AppDbContext _db;
+    private readonly IPasswordHasher _hasher;
 
-    public ProfilesController(AppDbContext db) => _db = db;
+    public ProfilesController(AppDbContext db, IPasswordHasher hasher)
+    {
+        _db = db;
+        _hasher = hasher;
+    }
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ProfileDto>>> List(CancellationToken ct)
@@ -143,6 +151,94 @@ public class ProfilesController : ControllerBase
         return NoContent();
     }
 
+    // -----------------------------------------------------------------------
+    // PIN management
+    // -----------------------------------------------------------------------
+
+    [HttpPut("{id:long}/pin")]
+    public async Task<IActionResult> SetPin(long id, [FromBody] SetPinRequest req, CancellationToken ct)
+    {
+        var user = await CurrentUser.GetAsync(User, _db, ct);
+        if (user is null) return Unauthorized();
+
+        var profile = await _db.Profiles.FirstOrDefaultAsync(p => p.Id == id && p.UserId == user.Id, ct);
+        if (profile is null) return NotFound();
+        if (string.IsNullOrEmpty(req.Pin) || !PinFormat.IsMatch(req.Pin!))
+        {
+            return BadRequest("PIN must be exactly 4 digits.");
+        }
+
+        // Replacing an existing PIN requires the current one — unless the
+        // caller is the root profile, which can override any sub-profile lock.
+        if (!string.IsNullOrEmpty(profile.PinHash) && !await CanBypassPinAsync(user, ct))
+        {
+            if (string.IsNullOrEmpty(req.CurrentPin) || !_hasher.Verify(req.CurrentPin!, profile.PinHash))
+            {
+                return BadRequest("Current PIN does not match.");
+            }
+        }
+
+        profile.PinHash = _hasher.Hash(req.Pin!);
+        await _db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    [HttpDelete("{id:long}/pin")]
+    public async Task<IActionResult> RemovePin(long id, [FromBody] RemovePinRequest req, CancellationToken ct)
+    {
+        var user = await CurrentUser.GetAsync(User, _db, ct);
+        if (user is null) return Unauthorized();
+
+        var profile = await _db.Profiles.FirstOrDefaultAsync(p => p.Id == id && p.UserId == user.Id, ct);
+        if (profile is null) return NotFound();
+        if (string.IsNullOrEmpty(profile.PinHash)) return NoContent();
+
+        if (!await CanBypassPinAsync(user, ct))
+        {
+            if (string.IsNullOrEmpty(req.CurrentPin) || !_hasher.Verify(req.CurrentPin!, profile.PinHash))
+            {
+                return BadRequest("Current PIN does not match.");
+            }
+        }
+
+        profile.PinHash = null;
+        await _db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    [HttpPost("{id:long}/verify-pin")]
+    public async Task<IActionResult> VerifyPin(long id, [FromBody] VerifyPinRequest req, CancellationToken ct)
+    {
+        var user = await CurrentUser.GetAsync(User, _db, ct);
+        if (user is null) return Unauthorized();
+
+        var profile = await _db.Profiles.FirstOrDefaultAsync(p => p.Id == id && p.UserId == user.Id, ct);
+        if (profile is null) return NotFound();
+        if (string.IsNullOrEmpty(profile.PinHash)) return NoContent();
+
+        if (string.IsNullOrEmpty(req.Pin) || !_hasher.Verify(req.Pin!, profile.PinHash))
+        {
+            return BadRequest("Incorrect PIN.");
+        }
+        return NoContent();
+    }
+
+    /// <summary>
+    /// The root profile can change another profile's PIN without proving the
+    /// current one — that's the parental-override path.
+    /// </summary>
+    private async Task<bool> CanBypassPinAsync(User user, CancellationToken ct)
+    {
+        // Heuristic: if the caller's session is currently scoped to a root
+        // profile we honour the override. With no profile context, we don't.
+        if (long.TryParse(Request.Headers["X-Profile-Id"].ToString(), out var callerProfileId))
+        {
+            return await _db.Profiles.AnyAsync(
+                p => p.Id == callerProfileId && p.UserId == user.Id && p.IsRoot, ct);
+        }
+        return false;
+    }
+
     private static string? NullIfBlank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -156,6 +252,7 @@ public class ProfilesController : ControllerBase
         AvatarIcon = p.AvatarIcon,
         IsRoot = p.IsRoot,
         IsKids = p.IsKids,
+        HasPin = !string.IsNullOrEmpty(p.PinHash),
         CreatedAt = p.CreatedAt == default ? null : p.CreatedAt.ToString("o"),
         UpdatedAt = p.UpdatedAt == default ? null : p.UpdatedAt.ToString("o")
     };

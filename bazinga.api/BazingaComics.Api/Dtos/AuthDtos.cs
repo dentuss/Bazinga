@@ -19,10 +19,40 @@ public class AuthResponse
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public string? DateOfBirth { get; set; }
+    public string? Phone { get; set; }
     public string? SubscriptionType { get; set; }
     public string? SubscriptionExpiration { get; set; }
     public string? CreatedAt { get; set; }
     public string? UpdatedAt { get; set; }
+}
+
+public class SigninStartRequest
+{
+    public string? Email { get; set; }
+}
+
+public class SigninVerifyRequest
+{
+    public string? Token { get; set; }
+}
+
+public class ForgotPasswordRequest
+{
+    public string? Email { get; set; }
+}
+
+public class ResetPasswordRequest
+{
+    public string? Token { get; set; }
+    public string? NewPassword { get; set; }
+}
+
+public class UpdateAccountRequest
+{
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public string? DateOfBirth { get; set; }
+    public string? Phone { get; set; }
 }
 
 public class EmailRequest

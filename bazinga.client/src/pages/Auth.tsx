@@ -1,27 +1,57 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Lock, Mail } from "lucide-react";
+import { ArrowLeft, ChevronDown, KeyRound, Loader2, Lock, Mail, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { signinStart } from "@/lib/auth";
+import { cn } from "@/lib/utils";
+
+type Mode = "magic" | "password";
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<Mode>("magic");
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
   const [error, setError] = useState("");
   const { login } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     document.title = "Sign in · Bazinga";
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    login(email, password)
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setError("Please enter your email.");
+      return;
+    }
+    setSending(true);
+    try {
+      await signinStart(cleanEmail);
+      setSent(cleanEmail);
+    } catch {
+      // Server returns 204 even on miss — only network errors land here.
+      setError("Could not send the sign-in link. Check your connection and try again.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    login(email.trim(), password)
       .then(() => navigate("/profiles"))
       .catch(() => setError("Authentication failed. Please check your details."));
   };
@@ -44,51 +74,100 @@ const Auth = () => {
           <div className="bg-card border border-border rounded-lg p-8 shadow-xl">
             <div className="text-center mb-8">
               <h1 className="text-3xl font-black text-foreground mb-2">WELCOME BACK</h1>
-              <p className="text-muted-foreground">Sign in to continue your adventure</p>
+              <p className="text-muted-foreground">
+                {mode === "magic"
+                  ? "We'll email you a one-tap sign-in link."
+                  : "Sign in with your password."}
+              </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-foreground font-semibold">
-                  EMAIL ADDRESS
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="Enter your email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 bg-background border-border"
-                    autoComplete="email"
-                  />
+            {sent ? (
+              <CheckYourEmail email={sent} onBack={() => setSent(null)} />
+            ) : mode === "magic" ? (
+              <form onSubmit={handleMagicLink} className="space-y-6">
+                <EmailField email={email} setEmail={setEmail} />
+                <Button type="submit" className="w-full" size="lg" disabled={sending}>
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                  {sending ? "Sending link…" : "Email me a sign-in link"}
+                </Button>
+                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+              </form>
+            ) : (
+              <form onSubmit={handlePasswordSubmit} className="space-y-6">
+                <EmailField email={email} setEmail={setEmail} />
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-foreground font-semibold">
+                    PASSWORD
+                  </Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="Enter your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="pl-10 bg-background border-border"
+                      autoComplete="current-password"
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Link
+                      to="/forgot-password"
+                      className="text-xs font-semibold text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
                 </div>
-              </div>
+                <Button type="submit" className="w-full" size="lg">
+                  SIGN IN
+                </Button>
+                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+              </form>
+            )}
 
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-foreground font-semibold">
-                  PASSWORD
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 bg-background border-border"
-                    autoComplete="current-password"
-                  />
-                </div>
-              </div>
+            {/* Get help dropdown — only shown when we're not in the "check email" state. */}
+            {!sent && (
+              <div className="mt-6">
+                <button
+                  type="button"
+                  onClick={() => setHelpOpen((o) => !o)}
+                  className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                  aria-expanded={helpOpen}
+                >
+                  Get help
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", helpOpen && "rotate-180")} />
+                </button>
 
-              <Button type="submit" className="w-full" size="lg">
-                SIGN IN
-              </Button>
-              {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-            </form>
+                {helpOpen && (
+                  <div className="mt-3 rounded-lg border border-border bg-background/40 divide-y divide-border overflow-hidden">
+                    <HelpOption
+                      icon={<Lock className="h-4 w-4" />}
+                      label="Sign in using password"
+                      active={mode === "password"}
+                      onClick={() => {
+                        setMode((m) => (m === "password" ? "magic" : "password"));
+                        setError("");
+                      }}
+                      hint={mode === "password" ? "Switch back to email link" : undefined}
+                    />
+                    <HelpOption
+                      icon={<ShieldCheck className="h-4 w-4" />}
+                      label="Sign in using 2FA"
+                      onClick={() => toast({ title: "Coming soon", description: "Two-factor sign-in isn't enabled on this account yet." })}
+                      hint="Coming soon"
+                    />
+                    <HelpOption
+                      icon={<KeyRound className="h-4 w-4" />}
+                      label="Don't have access to my email"
+                      onClick={() => toast({ title: "Coming soon", description: "Account recovery without email isn't available yet." })}
+                      hint="Coming soon"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-6 text-center">
               <p className="text-muted-foreground">
@@ -114,5 +193,71 @@ const Auth = () => {
     </div>
   );
 };
+
+const EmailField = ({ email, setEmail }: { email: string; setEmail: (v: string) => void }) => (
+  <div className="space-y-2">
+    <Label htmlFor="email" className="text-foreground font-semibold">
+      EMAIL ADDRESS
+    </Label>
+    <div className="relative">
+      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+      <Input
+        id="email"
+        type="email"
+        placeholder="Enter your email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="pl-10 bg-background border-border"
+        autoComplete="email"
+        required
+      />
+    </div>
+  </div>
+);
+
+const HelpOption = ({
+  icon,
+  label,
+  active,
+  onClick,
+  hint,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  hint?: string;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={cn(
+      "w-full flex items-center gap-3 px-4 py-3 text-left text-sm font-semibold transition-colors",
+      active ? "text-primary bg-primary/10" : "text-foreground hover:bg-muted/60"
+    )}
+  >
+    <span className={cn(active ? "text-primary" : "text-muted-foreground")}>{icon}</span>
+    <span className="flex-1">{label}</span>
+    {hint && <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{hint}</span>}
+  </button>
+);
+
+const CheckYourEmail = ({ email, onBack }: { email: string; onBack: () => void }) => (
+  <div className="text-center space-y-4">
+    <div className="mx-auto h-12 w-12 rounded-full bg-primary/15 grid place-items-center">
+      <Mail className="h-6 w-6 text-primary" />
+    </div>
+    <h2 className="text-xl font-black">Check your email</h2>
+    <p className="text-sm text-muted-foreground">
+      If an account exists for{" "}
+      <span className="font-semibold text-foreground">{email}</span>, we just sent a sign-in link.
+      It expires in 15 minutes and can only be used once.
+    </p>
+    <Button variant="outline" onClick={onBack} className="gap-2">
+      <X className="h-4 w-4" />
+      Use a different email
+    </Button>
+  </div>
+);
 
 export default Auth;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Lock, Save, ShieldOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,8 @@ import {
   MAX_PROFILES_PER_ACCOUNT,
   PROFILE_ICONS,
   PROFILE_PALETTE,
+  removeProfilePin,
+  setProfilePin,
 } from "@/lib/profiles";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +38,8 @@ const ProfileEditor = () => {
     createProfile,
     saveProfile,
     removeProfile,
+    refreshProfiles,
+    token,
   } = useAuth();
 
   const isCreate = !params.id;
@@ -53,6 +57,9 @@ const ProfileEditor = () => {
   const [submitting, setSubmitting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [pinValue, setPinValue] = useState("");
+  const [currentPinValue, setCurrentPinValue] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
 
   useEffect(() => {
     if (existing) {
@@ -141,6 +148,65 @@ const ProfileEditor = () => {
   };
 
   const showDelete = !isCreate && existing && !existing.isRoot && canManageAll;
+  const showPin = !isCreate && existing;
+  const isRootCaller = currentProfile?.isRoot === true;
+  // Root can clear another profile's PIN without proving it; everyone else
+  // needs the current PIN to replace or remove their own.
+  const needsCurrentPin = Boolean(existing?.hasPin) && !isRootCaller;
+
+  const handleSetPin = async () => {
+    if (!existing || !token) return;
+    if (pinValue.length !== 4 || !/^[0-9]{4}$/.test(pinValue)) {
+      toast({ title: "PIN must be exactly 4 digits", variant: "destructive" });
+      return;
+    }
+    setPinBusy(true);
+    try {
+      await setProfilePin(
+        token,
+        existing.id,
+        pinValue,
+        needsCurrentPin ? currentPinValue : undefined,
+        currentProfile?.id ?? null
+      );
+      await refreshProfiles();
+      setPinValue("");
+      setCurrentPinValue("");
+      toast({ title: existing.hasPin ? "PIN updated" : "PIN set", description: `${existing.name} is now locked.` });
+    } catch (err) {
+      toast({
+        title: "Could not save PIN",
+        description: err instanceof Error ? err.message : "Try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
+  const handleRemovePin = async () => {
+    if (!existing || !token) return;
+    setPinBusy(true);
+    try {
+      await removeProfilePin(
+        token,
+        existing.id,
+        needsCurrentPin ? currentPinValue : undefined,
+        currentProfile?.id ?? null
+      );
+      await refreshProfiles();
+      setCurrentPinValue("");
+      toast({ title: "PIN removed", description: `${existing.name} is no longer locked.` });
+    } catch (err) {
+      toast({
+        title: "Could not remove PIN",
+        description: err instanceof Error ? err.message : "Try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setPinBusy(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -273,6 +339,81 @@ const ProfileEditor = () => {
                 </div>
                 <Switch checked={isKids} onCheckedChange={setIsKids} />
               </div>
+
+              {showPin && (
+                <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-primary" />
+                    <p className="font-semibold">Profile PIN</p>
+                    {existing?.hasPin && (
+                      <span className="text-[10px] uppercase tracking-wider rounded-full border border-primary/40 text-primary px-2 py-0.5">
+                        Enabled
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    A 4-digit PIN must be entered every time someone switches to this profile.
+                    {isRootCaller && existing?.hasPin && !existing?.isRoot
+                      ? " As the main profile, you can change or clear this PIN without the current one."
+                      : ""}
+                  </p>
+
+                  {needsCurrentPin && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="current-pin">Current PIN</Label>
+                      <Input
+                        id="current-pin"
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        pattern="[0-9]{4}"
+                        placeholder="••••"
+                        value={currentPinValue}
+                        onChange={(e) => setCurrentPinValue(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                        className="w-32 tracking-[0.6em] text-center text-lg"
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="new-pin">{existing?.hasPin ? "New PIN" : "Set a PIN"}</Label>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Input
+                        id="new-pin"
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        pattern="[0-9]{4}"
+                        placeholder="••••"
+                        value={pinValue}
+                        onChange={(e) => setPinValue(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                        className="w-32 tracking-[0.6em] text-center text-lg"
+                      />
+                      <Button
+                        type="button"
+                        onClick={handleSetPin}
+                        disabled={pinBusy || pinValue.length !== 4}
+                        className="gap-2"
+                      >
+                        <Lock className="h-4 w-4" />
+                        {existing?.hasPin ? "Update PIN" : "Set PIN"}
+                      </Button>
+                      {existing?.hasPin && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="gap-2 text-muted-foreground hover:text-foreground"
+                          onClick={handleRemovePin}
+                          disabled={pinBusy || (needsCurrentPin && currentPinValue.length !== 4)}
+                        >
+                          <ShieldOff className="h-4 w-4" />
+                          Remove PIN
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center gap-3 pt-2">
                 <Button type="submit" disabled={submitting} className="gap-2">

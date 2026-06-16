@@ -23,6 +23,10 @@ public class Profile
 
     public bool IsKids { get; set; }
 
+    /// <summary>Optional BCrypt-hashed 4-digit PIN. Null when the profile is not PIN-locked.</summary>
+    [JsonIgnore]
+    public string? PinHash { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }

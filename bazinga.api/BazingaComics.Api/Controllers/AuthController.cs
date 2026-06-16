@@ -322,11 +322,233 @@ public class AuthController : ControllerBase
         FirstName = user.FirstName,
         LastName = user.LastName,
         DateOfBirth = user.DateOfBirth?.ToString("yyyy-MM-dd"),
+        Phone = user.Phone,
         SubscriptionType = user.SubscriptionType,
         SubscriptionExpiration = user.SubscriptionExpiration?.ToString("yyyy-MM-dd"),
         CreatedAt = user.CreatedAt == default ? null : user.CreatedAt.ToString("o"),
         UpdatedAt = user.UpdatedAt == default ? null : user.UpdatedAt.ToString("o")
     };
+
+    // -----------------------------------------------------------------------
+    // Passwordless sign-in (magic link)
+    // -----------------------------------------------------------------------
+
+    private const int SigninTokenLifetimeMinutes = 15;
+    private const int PasswordResetTokenLifetimeMinutes = 30;
+
+    /// <summary>
+    /// Always returns 204 — never confirms whether the email exists. If the
+    /// address matches a real account we email a one-shot sign-in link.
+    /// </summary>
+    [HttpPost("signin/start")]
+    public async Task<IActionResult> SigninStart([FromBody] SigninStartRequest req, CancellationToken ct)
+    {
+        var email = req.Email?.Trim();
+        if (string.IsNullOrWhiteSpace(email)) return BadRequest("Email is required.");
+
+        var exists = await _db.Users.AnyAsync(u => u.Email == email, ct);
+        if (!exists)
+        {
+            // Don't leak account existence; pretend we sent it.
+            return NoContent();
+        }
+
+        await _db.SigninTokens
+            .Where(t => t.Email == email && t.ConsumedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.ConsumedAt, DateTime.UtcNow), ct);
+
+        var rawToken = SignupTokens.Generate();
+        _db.SigninTokens.Add(new SigninToken
+        {
+            Email = email!,
+            TokenHash = SignupTokens.Hash(rawToken),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(SigninTokenLifetimeMinutes),
+        });
+        await _db.SaveChangesAsync(ct);
+
+        var baseUrl = _emailOptions.PublicBaseUrl.TrimEnd('/');
+        var link = $"{baseUrl}/signin/verify?token={Uri.EscapeDataString(rawToken)}";
+        await _emailSender.SendAsync(email!, "Your Bazinga sign-in link", BuildSigninEmail(link), ct);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Burns the magic-link token and, if valid, returns a JWT — i.e. the
+    /// caller is logged in.
+    /// </summary>
+    [HttpPost("signin/verify")]
+    public async Task<ActionResult<AuthResponse>> SigninVerify([FromBody] SigninVerifyRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Token)) return BadRequest("Token is required.");
+
+        var hash = SignupTokens.Hash(req.Token!);
+        var entity = await _db.SigninTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+        if (entity is null) return BadRequest("Invalid sign-in link.");
+        if (entity.ConsumedAt is not null) return BadRequest("This link has already been used.");
+        if (entity.ExpiresAt < DateTime.UtcNow) return BadRequest("This link has expired.");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == entity.Email, ct);
+        if (user is null) return BadRequest("Account not found.");
+
+        entity.ConsumedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(BuildResponse(user));
+    }
+
+    // -----------------------------------------------------------------------
+    // Password reset
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Always returns 204 to avoid leaking account existence. When the email
+    /// matches a real account we issue a one-shot reset token and email it.
+    /// </summary>
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest req, CancellationToken ct)
+    {
+        var email = req.Email?.Trim();
+        if (string.IsNullOrWhiteSpace(email)) return BadRequest("Email is required.");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
+        if (user is null) return NoContent();
+
+        await _db.PasswordResetTokens
+            .Where(t => t.Email == email && t.ConsumedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.ConsumedAt, DateTime.UtcNow), ct);
+
+        var rawToken = SignupTokens.Generate();
+        _db.PasswordResetTokens.Add(new PasswordResetToken
+        {
+            Email = email!,
+            TokenHash = SignupTokens.Hash(rawToken),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(PasswordResetTokenLifetimeMinutes),
+        });
+        await _db.SaveChangesAsync(ct);
+
+        var baseUrl = _emailOptions.PublicBaseUrl.TrimEnd('/');
+        var link = $"{baseUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}";
+        await _emailSender.SendAsync(email!, "Reset your Bazinga password", BuildResetPasswordEmail(link), ct);
+        return NoContent();
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Token)) return BadRequest("Token is required.");
+        if (string.IsNullOrWhiteSpace(req.NewPassword) || req.NewPassword!.Length < 6)
+        {
+            return BadRequest("Password must be at least 6 characters.");
+        }
+
+        var hash = SignupTokens.Hash(req.Token!);
+        var entity = await _db.PasswordResetTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+        if (entity is null) return BadRequest("Invalid reset link.");
+        if (entity.ConsumedAt is not null) return BadRequest("This link has already been used.");
+        if (entity.ExpiresAt < DateTime.UtcNow) return BadRequest("This link has expired.");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == entity.Email, ct);
+        if (user is null) return BadRequest("Account not found.");
+
+        user.Password = _hasher.Hash(req.NewPassword!);
+        entity.ConsumedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        return NoContent();
+    }
+
+    // -----------------------------------------------------------------------
+    // Self-service account update (used for phone, names, DOB)
+    // -----------------------------------------------------------------------
+
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    [HttpPut("me")]
+    public async Task<ActionResult<AuthResponse>> UpdateMe([FromBody] UpdateAccountRequest req, CancellationToken ct)
+    {
+        var user = await CurrentUser.GetAsync(User, _db, ct);
+        if (user is null) return Unauthorized();
+
+        if (req.FirstName is not null) user.FirstName = NullIfBlank(req.FirstName);
+        if (req.LastName is not null) user.LastName = NullIfBlank(req.LastName);
+        if (req.Phone is not null) user.Phone = NullIfBlank(req.Phone);
+        if (req.DateOfBirth is not null)
+        {
+            if (string.IsNullOrWhiteSpace(req.DateOfBirth))
+            {
+                user.DateOfBirth = null;
+            }
+            else if (DateOnly.TryParse(req.DateOfBirth, out var dob))
+            {
+                user.DateOfBirth = dob;
+            }
+            else
+            {
+                return BadRequest("Invalid date of birth.");
+            }
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return Ok(BuildResponse(user));
+    }
+
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string BuildSigninEmail(string link) => $@"
+<!doctype html>
+<html lang=""en"">
+<head>
+  <meta charset=""utf-8"" />
+  <title>Your Bazinga sign-in link</title>
+</head>
+<body style=""margin:0;padding:0;background:#0a0a0a;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#f5f5f5;"">
+  <table role=""presentation"" width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""background:#0a0a0a;padding:40px 16px;"">
+    <tr><td align=""center"">
+      <table role=""presentation"" width=""560"" cellpadding=""0"" cellspacing=""0"" style=""max-width:560px;background:#141414;border:1px solid #2a2a2a;border-radius:12px;overflow:hidden;"">
+        <tr><td style=""padding:32px;"">
+          <div style=""font-size:32px;font-weight:900;letter-spacing:-1px;color:#E50914;"">BAZINGA</div>
+          <h1 style=""font-size:26px;line-height:1.2;margin:16px 0 12px 0;color:#ffffff;font-weight:900;"">Sign in to Bazinga</h1>
+          <p style=""margin:0 0 16px 0;color:#cfcfcf;font-size:15px;line-height:1.55;"">
+            Tap the button below to sign in. The link expires in {SigninTokenLifetimeMinutes} minutes and can only be used once.
+          </p>
+          <p style=""text-align:center;margin:24px 0;"">
+            <a href=""{link}"" style=""display:inline-block;background:#E50914;color:#ffffff;text-decoration:none;font-weight:700;padding:14px 28px;border-radius:6px;font-size:15px;letter-spacing:0.5px;"">Sign in to Bazinga</a>
+          </p>
+          <p style=""margin:24px 0 0 0;color:#888;font-size:12px;"">Didn't ask to sign in? You can safely ignore this email.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>";
+
+    private static string BuildResetPasswordEmail(string link) => $@"
+<!doctype html>
+<html lang=""en"">
+<head>
+  <meta charset=""utf-8"" />
+  <title>Reset your Bazinga password</title>
+</head>
+<body style=""margin:0;padding:0;background:#0a0a0a;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#f5f5f5;"">
+  <table role=""presentation"" width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""background:#0a0a0a;padding:40px 16px;"">
+    <tr><td align=""center"">
+      <table role=""presentation"" width=""560"" cellpadding=""0"" cellspacing=""0"" style=""max-width:560px;background:#141414;border:1px solid #2a2a2a;border-radius:12px;overflow:hidden;"">
+        <tr><td style=""padding:32px;"">
+          <div style=""font-size:32px;font-weight:900;letter-spacing:-1px;color:#E50914;"">BAZINGA</div>
+          <h1 style=""font-size:26px;line-height:1.2;margin:16px 0 12px 0;color:#ffffff;font-weight:900;"">Reset your password</h1>
+          <p style=""margin:0 0 16px 0;color:#cfcfcf;font-size:15px;line-height:1.55;"">
+            Tap the button to choose a new password. The link expires in {PasswordResetTokenLifetimeMinutes} minutes and can only be used once.
+          </p>
+          <p style=""text-align:center;margin:24px 0;"">
+            <a href=""{link}"" style=""display:inline-block;background:#E50914;color:#ffffff;text-decoration:none;font-weight:700;padding:14px 28px;border-radius:6px;font-size:15px;letter-spacing:0.5px;"">Reset password</a>
+          </p>
+          <p style=""margin:24px 0 0 0;color:#888;font-size:12px;"">If you didn't request this you can safely ignore the email.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>";
 
     private static string BuildSignupEmail(string link) => $@"
 <!doctype html>
