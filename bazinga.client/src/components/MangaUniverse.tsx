@@ -120,6 +120,7 @@ const MangaUniverse = ({ mode = "full", viewAllHref }: MangaUniverseProps = {}) 
           id="manga-rail"
           title="MANGA"
           viewAllHref={viewAllHref}
+          rows={2}
           loading={list.isLoading}
           empty={items.length === 0}
           emptyMessage="No manga to show yet."

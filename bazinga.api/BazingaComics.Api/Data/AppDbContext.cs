@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
     public DbSet<Library> Libraries => Set<Library>();
     public DbSet<LibraryItem> LibraryItems => Set<LibraryItem>();
+    public DbSet<ProfileCollectionItem> CollectionItems => Set<ProfileCollectionItem>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<Report> Reports => Set<Report>();
@@ -184,6 +185,24 @@ public class AppDbContext : DbContext
             e.Property(x => x.AddedAt).HasColumnName("added_at").IsRequired();
             e.HasIndex(x => new { x.LibraryId, x.ComicId }).IsUnique();
             e.HasOne(x => x.Comic).WithMany().HasForeignKey(x => x.ComicId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<ProfileCollectionItem>(e =>
+        {
+            e.ToTable("profile_collection_items");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ProfileId).HasColumnName("profile_id").IsRequired();
+            e.Property(x => x.Collection).HasColumnName("collection").HasMaxLength(20).IsRequired();
+            e.Property(x => x.Kind).HasColumnName("kind").HasMaxLength(20).IsRequired();
+            e.Property(x => x.ContentId).HasColumnName("content_id").HasMaxLength(100).IsRequired();
+            e.Property(x => x.Title).HasColumnName("title").HasMaxLength(300).IsRequired();
+            e.Property(x => x.Image).HasColumnName("image").HasMaxLength(1000);
+            e.Property(x => x.Subtitle).HasColumnName("subtitle").HasMaxLength(500);
+            e.Property(x => x.PayloadJson).HasColumnName("payload_json").HasColumnType("LONGTEXT");
+            e.Property(x => x.AddedAt).HasColumnName("added_at").IsRequired();
+            e.HasIndex(x => new { x.ProfileId, x.Collection, x.Kind, x.ContentId }).IsUnique();
+            e.HasIndex(x => new { x.ProfileId, x.Collection });
+            e.HasOne(x => x.Profile).WithMany().HasForeignKey(x => x.ProfileId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Order>(e =>

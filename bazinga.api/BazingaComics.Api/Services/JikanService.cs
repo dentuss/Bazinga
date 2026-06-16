@@ -12,6 +12,15 @@ public class JikanService : IJikanService
     private static readonly TimeSpan GenreCacheTtl = TimeSpan.FromHours(24);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    // Jikan rate-limits at ~3 req/sec. A home/TV page fires half a dozen list
+    // calls at once, which previously got several of them 429'd (the symptom:
+    // "Trending Now" / "Anime Universe" rendering empty while the cached/first
+    // call succeeded). Serialise outbound calls through a process-wide gate with
+    // a minimum spacing so we stay inside the budget, and retry once on 429.
+    private static readonly SemaphoreSlim Gate = new(1, 1);
+    private static readonly TimeSpan MinSpacing = TimeSpan.FromMilliseconds(380);
+    private static DateTime _lastCallUtc = DateTime.MinValue;
+
     private readonly HttpClient _http;
     private readonly IMemoryCache _cache;
     private readonly ILogger<JikanService> _logger;
@@ -161,23 +170,62 @@ public class JikanService : IJikanService
     {
         try
         {
-            using var resp = await _http.GetAsync(path, ct);
-            if (resp.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            // One retry: if Jikan still 429s after the spacing, back off and try again.
+            for (var attempt = 0; attempt < 2; attempt++)
             {
-                _logger.LogWarning("Jikan rate-limited the request for {Path}", path);
-                return default;
+                using var resp = await SendThrottledAsync(path, ct);
+                if (resp.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    _logger.LogWarning("Jikan rate-limited {Path} (attempt {Attempt})", path, attempt + 1);
+                    if (attempt == 0)
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(900), ct);
+                        continue;
+                    }
+                    return default;
+                }
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Jikan {Status} for {Path}", (int)resp.StatusCode, path);
+                    return default;
+                }
+                return await resp.Content.ReadFromJsonAsync<T>(Json, ct);
             }
-            if (!resp.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("Jikan {Status} for {Path}", (int)resp.StatusCode, path);
-                return default;
-            }
-            return await resp.Content.ReadFromJsonAsync<T>(Json, ct);
+            return default;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Jikan call failed for {Path}", path);
             return default;
+        }
+    }
+
+    /// <summary>
+    /// Issues a GET while holding the process-wide gate, enforcing a minimum
+    /// gap between consecutive Jikan requests so bursts stay within rate limits.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendThrottledAsync(string path, CancellationToken ct)
+    {
+        await Gate.WaitAsync(ct);
+        try
+        {
+            var since = DateTime.UtcNow - _lastCallUtc;
+            if (since < MinSpacing)
+            {
+                await Task.Delay(MinSpacing - since, ct);
+            }
+            try
+            {
+                return await _http.GetAsync(path, ct);
+            }
+            finally
+            {
+                _lastCallUtc = DateTime.UtcNow;
+            }
+        }
+        finally
+        {
+            Gate.Release();
         }
     }
 

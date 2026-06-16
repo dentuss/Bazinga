@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -8,18 +8,13 @@ import {
   ChevronLeft,
   ChevronDown,
   Loader2,
-  Search,
-  X,
   ThumbsUp,
-  ThumbsDown,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import SiteHeader, { type SiteHeaderNavItem } from "@/components/SiteHeader";
+import TVHeader from "@/components/TVHeader";
 import TVHero from "@/components/TVHero";
 import SuperheroShowsSection from "@/components/SuperheroShowsSection";
+import AnimeModal from "@/components/AnimeModal";
 import {
-  fetchAnime,
   fetchAnimeGenres,
   fetchSeasonNow,
   fetchSeasonUpcoming,
@@ -28,6 +23,7 @@ import {
   type AnimeDto,
   type GenreDto,
 } from "@/lib/metadata";
+import { cn } from "@/lib/utils";
 import heroBanner1 from "@/assets/hero-banner-1.jpg";
 import heroBanner2 from "@/assets/hero-banner-2.jpg";
 import heroBanner3 from "@/assets/hero-banner-3.jpg";
@@ -158,6 +154,7 @@ const RowChrome = ({
   id,
   loading,
   empty,
+  rows = 2,
 }: {
   title: string;
   badge?: React.ReactNode;
@@ -165,6 +162,8 @@ const RowChrome = ({
   id: string;
   loading?: boolean;
   empty?: boolean;
+  /** 2 = double-height scroller (default), 1 = single row. */
+  rows?: 1 | 2;
   children: React.ReactNode;
 }) => (
   <section className="relative py-4 md:py-6" id={id}>
@@ -198,16 +197,21 @@ const RowChrome = ({
       </button>
       <div
         id={id}
-        className="flex gap-3 md:gap-4 overflow-x-auto px-4 md:px-8 pb-10 pt-10 scroll-smooth snap-x snap-mandatory"
+        className={cn(
+          "overflow-x-auto px-4 md:px-8 pb-10 pt-10 scroll-smooth no-scrollbar",
+          rows === 2
+            ? "grid grid-rows-2 grid-flow-col auto-cols-max gap-x-3 gap-y-4 md:gap-x-4"
+            : "flex gap-3 md:gap-4 snap-x snap-mandatory"
+        )}
         style={{ scrollbarWidth: "none" }}
       >
         {loading ? (
-          <div className="container mx-auto px-4 text-sm text-muted-foreground flex items-center gap-2">
+          <div className="px-4 text-sm text-muted-foreground flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading…
           </div>
         ) : empty ? (
-          <p className="container mx-auto px-4 text-sm text-muted-foreground">
+          <p className="px-4 text-sm text-muted-foreground">
             Nothing here yet — try a different filter.
           </p>
         ) : (
@@ -279,7 +283,7 @@ const ContinueWatchingRow = ({
         </button>
         <div
           id={id}
-          className="flex gap-3 md:gap-4 overflow-x-auto px-4 md:px-8 pb-6 pt-2 scroll-smooth snap-x snap-mandatory"
+          className="grid grid-rows-2 grid-flow-col auto-cols-max gap-x-3 gap-y-4 md:gap-x-4 overflow-x-auto px-4 md:px-8 pb-6 pt-2 scroll-smooth no-scrollbar"
           style={{ scrollbarWidth: "none" }}
         >
           {items.map((item, idx) => {
@@ -364,7 +368,7 @@ const TopTenRow = ({
         </button>
         <div
           id={id}
-          className="flex gap-2 md:gap-4 overflow-x-auto px-4 md:px-8 pb-10 pt-6 scroll-smooth snap-x snap-mandatory"
+          className="flex gap-2 md:gap-4 overflow-x-auto px-4 md:px-8 pb-10 pt-6 scroll-smooth snap-x snap-mandatory no-scrollbar"
           style={{ scrollbarWidth: "none" }}
         >
           {items.slice(0, 10).map((show, idx) => (
@@ -414,205 +418,6 @@ const TopTenRow = ({
 };
 
 // ---------------------------------------------------------------------------
-// Show modal (detail fetched from /api/metadata/anime/{id})
-// ---------------------------------------------------------------------------
-
-const ShowModal = ({
-  show,
-  onClose,
-}: {
-  show: AnimeDto;
-  onClose: () => void;
-}) => {
-  const { data: detail } = useQuery({
-    queryKey: ["anime-detail", show.malId],
-    queryFn: () => fetchAnime(show.malId),
-    staleTime: 10 * 60 * 1000,
-  });
-  const full = detail ?? show;
-  const backdrop =
-    full.trailerImageUrl ?? full.largeImageUrl ?? full.imageUrl ?? backdropFor(full.malId);
-  const seasons = seasonCount(full);
-
-  return (
-    <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-      <div className="relative w-full max-w-3xl rounded-xl overflow-hidden border border-orange-500/40 bg-card shadow-[0_0_60px_hsl(25_95%_55%/0.4)]">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-3 right-3 z-10 h-9 w-9 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center"
-          aria-label="Close"
-        >
-          <X className="h-5 w-5" />
-        </button>
-        <div className="relative aspect-video">
-          <img src={backdrop} alt={full.title} className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-card via-card/60 to-transparent" />
-          <div className="absolute bottom-4 left-6 right-6">
-            <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white">{full.title}</h2>
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-white/85">
-              <span className="font-bold text-green-500">{matchPercent(full)}% Match</span>
-              {full.year && <span>{full.year}</span>}
-              <span className="border border-white/40 px-2 py-0.5 text-xs">{ratingLabel(full)}</span>
-              {seasons ? (
-                <span>
-                  {seasons} Season{seasons > 1 ? "s" : ""}
-                </span>
-              ) : full.episodes ? (
-                <span>{full.episodes} episodes</span>
-              ) : null}
-            </div>
-          </div>
-        </div>
-        <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            {full.synopsis ?? "No synopsis yet."}
-          </p>
-          {full.studios.length > 0 && (
-            <p className="text-xs text-white/70">
-              <span className="text-white/50 mr-1">Studios:</span>
-              {full.studios.join(", ")}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-3">
-            <Button className="bg-orange-500 text-black hover:bg-orange-600 font-bold">
-              <Play className="h-4 w-4 fill-current" /> Play
-            </Button>
-            <Button variant="outline" className="border-orange-500/60 text-orange-400 hover:bg-orange-500/10">
-              <Plus className="h-4 w-4" /> My List
-            </Button>
-            <Button variant="ghost" className="text-white hover:bg-white/10">
-              <ThumbsUp className="h-4 w-4" /> Like
-            </Button>
-            <Button variant="ghost" className="text-white hover:bg-white/10">
-              <ThumbsDown className="h-4 w-4" /> Not for me
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
-            <span className="text-white/70">Genres:</span>
-            {full.genres.map((g, i) => (
-              <span key={g} className="text-orange-400">
-                {g}
-                {i < full.genres.length - 1 ? "," : ""}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// Search overlay
-// ---------------------------------------------------------------------------
-
-const SearchOverlay = ({
-  open,
-  onClose,
-  onSelect,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSelect: (a: AnimeDto) => void;
-}) => {
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
-    return () => clearTimeout(t);
-  }, [query, open]);
-
-  useEffect(() => {
-    if (!open) {
-      setQuery("");
-      setDebouncedQuery("");
-    }
-  }, [open]);
-
-  const { data, isFetching } = useQuery({
-    queryKey: ["anime-search", debouncedQuery],
-    queryFn: () => searchAnime({ q: debouncedQuery, limit: 18 }),
-    enabled: open && debouncedQuery.length > 1,
-    staleTime: 60 * 1000,
-  });
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[90] bg-black/80 backdrop-blur-sm animate-fade-in" onClick={onClose}>
-      <div
-        className="container mx-auto px-4 md:px-8 pt-20 md:pt-28 max-w-4xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-          <Input
-            autoFocus
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search anime titles, e.g. 'frieren', 'cowboy bebop'…"
-            className="h-14 pl-12 pr-14 text-base bg-card/90 border-border/80"
-          />
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 grid place-items-center rounded-full bg-muted hover:bg-muted/80"
-            aria-label="Close search"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="mt-6">
-          {debouncedQuery.length < 2 ? (
-            <p className="text-sm text-muted-foreground">Type at least 2 characters to search.</p>
-          ) : isFetching && !data ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Searching…
-            </div>
-          ) : data && data.data.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No matches for "{debouncedQuery}".</p>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4 max-h-[60vh] overflow-y-auto pb-6">
-              {data?.data.map((a) => (
-                <button
-                  key={a.malId}
-                  type="button"
-                  onClick={() => {
-                    onSelect(a);
-                    onClose();
-                  }}
-                  className="group text-left outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-md"
-                >
-                  <div className="relative rounded-md overflow-hidden bg-card" style={{ aspectRatio: "2 / 3" }}>
-                    <img
-                      src={a.largeImageUrl ?? a.imageUrl ?? backdropFor(a.malId)}
-                      alt={a.title}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                    <div className="absolute bottom-2 left-2 right-2">
-                      <p className="text-xs font-bold text-white line-clamp-2">{a.title}</p>
-                      <p className="text-[10px] text-white/70 uppercase">{yearLabel(a)}</p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ---------------------------------------------------------------------------
 // Genre filter
 // ---------------------------------------------------------------------------
 
@@ -626,30 +431,28 @@ const GenreBar = ({
   onChange: (id: number | null) => void;
 }) => {
   // Curated list — only show high-signal genres so the bar is scannable.
-  const curated = useMemo(() => {
-    const preferred = [
-      "Action",
-      "Adventure",
-      "Comedy",
-      "Drama",
-      "Fantasy",
-      "Mystery",
-      "Romance",
-      "Sci-Fi",
-      "Slice of Life",
-      "Supernatural",
-      "Sports",
-      "Horror",
-    ];
-    return genres
-      .filter((g) => preferred.includes(g.name))
-      .sort((a, b) => preferred.indexOf(a.name) - preferred.indexOf(b.name));
-  }, [genres]);
+  const curated = [
+    "Action",
+    "Adventure",
+    "Comedy",
+    "Drama",
+    "Fantasy",
+    "Mystery",
+    "Romance",
+    "Sci-Fi",
+    "Slice of Life",
+    "Supernatural",
+    "Sports",
+    "Horror",
+  ];
+  const shown = genres
+    .filter((g) => curated.includes(g.name))
+    .sort((a, b) => curated.indexOf(a.name) - curated.indexOf(b.name));
 
-  if (curated.length === 0) return null;
+  if (shown.length === 0) return null;
 
   return (
-    <div className="container mx-auto px-4 md:px-8 mt-2 mb-1 flex gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+    <div className="container mx-auto px-4 md:px-8 mt-4 mb-1 flex gap-2 overflow-x-auto no-scrollbar" style={{ scrollbarWidth: "none" }}>
       <button
         type="button"
         onClick={() => onChange(null)}
@@ -661,7 +464,7 @@ const GenreBar = ({
       >
         All
       </button>
-      {curated.map((g) => (
+      {shown.map((g) => (
         <button
           key={g.malId}
           type="button"
@@ -683,32 +486,9 @@ const GenreBar = ({
 // Page
 // ---------------------------------------------------------------------------
 
-const tvNavItems: SiteHeaderNavItem[] = [
-  { label: "Home", href: "#continue-watching" },
-  { label: "Series", href: "#bazinga-originals" },
-  { label: "Anime", href: "#anime-universe" },
-  { label: "New & Popular", href: "#new-noteworthy" },
-  { label: "My List", href: "#top-10" },
-  { label: "Comics", to: "/comics", tone: "red", emphasize: true },
-];
-
 const BazingaTV = () => {
   const [selectedShow, setSelectedShow] = useState<AnimeDto | null>(null);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [activeGenre, setActiveGenre] = useState<number | null>(null);
-
-  // Open the search overlay with Ctrl/Cmd+K
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setSearchOpen(true);
-      }
-      if (e.key === "Escape") setSearchOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   const topAnime = useQuery({
     queryKey: ["anime-top"],
@@ -717,17 +497,12 @@ const BazingaTV = () => {
   });
   const seasonNow = useQuery({
     queryKey: ["anime-season-now"],
-    queryFn: () => fetchSeasonNow(1, 16),
+    queryFn: () => fetchSeasonNow(1, 18),
     staleTime: 15 * 60 * 1000,
   });
   const seasonUpcoming = useQuery({
     queryKey: ["anime-season-upcoming"],
-    queryFn: () => fetchSeasonUpcoming(1, 16),
-    staleTime: 15 * 60 * 1000,
-  });
-  const animeOriginals = useQuery({
-    queryKey: ["anime-originals"],
-    queryFn: () => searchAnime({ orderBy: "popularity", limit: 16 }),
+    queryFn: () => fetchSeasonUpcoming(1, 18),
     staleTime: 15 * 60 * 1000,
   });
   const filteredAnime = useQuery({
@@ -747,36 +522,16 @@ const BazingaTV = () => {
   // "Continue watching" is fake — we don't track real progress yet — but we
   // pull the titles/posters from the same top-anime fetch so it doesn't feel
   // disconnected.
-  const continueWatching = topAnime.data?.data.slice(0, 6) ?? [];
+  const continueWatching = topAnime.data?.data.slice(0, 8) ?? [];
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <SiteHeader
-        brand={{ layout: "inline", accentText: "TV", accentColor: "orange" }}
-        navItems={tvNavItems}
-        avatarAccent="orange"
-      />
+      <TVHeader />
 
       {/* Hero trailer carousel (real local trailer videos) */}
       <TVHero />
 
-      {/* Search + genre filter bar */}
-      <div className="container mx-auto px-4 md:px-8 mt-6 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-bold uppercase tracking-[0.3em] text-orange-500/80">
-          Browse
-        </h2>
-        <button
-          type="button"
-          onClick={() => setSearchOpen(true)}
-          className="inline-flex items-center gap-2 rounded-full border border-white/20 px-3 py-1.5 text-xs text-white/85 hover:border-white/60 hover:text-white transition-colors"
-        >
-          <Search className="h-3.5 w-3.5" />
-          Search anime
-          <span className="hidden md:inline-block text-[10px] text-white/40 ml-2 px-1 py-px border border-white/20 rounded">
-            Ctrl K
-          </span>
-        </button>
-      </div>
+      {/* Genre filter bar (search lives in the global header — Cmd/Ctrl+K) */}
       <GenreBar
         genres={genres.data ?? []}
         activeId={activeGenre}
@@ -795,12 +550,6 @@ const BazingaTV = () => {
           items={seasonNow.data?.data ?? []}
           onSelect={(s) => setSelectedShow(s)}
           loading={seasonNow.isLoading}
-        />
-        <ShowRow
-          title="Bazinga Originals"
-          items={animeOriginals.data?.data ?? []}
-          onSelect={(s) => setSelectedShow(s)}
-          loading={animeOriginals.isLoading}
         />
         <SuperheroShowsSection />
         <ShowRow
@@ -832,12 +581,7 @@ const BazingaTV = () => {
         </div>
       </footer>
 
-      {selectedShow && <ShowModal show={selectedShow} onClose={() => setSelectedShow(null)} />}
-      <SearchOverlay
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        onSelect={(a) => setSelectedShow(a)}
-      />
+      {selectedShow && <AnimeModal anime={selectedShow} onClose={() => setSelectedShow(null)} />}
     </div>
   );
 };

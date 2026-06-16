@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { WishlistProvider } from "@/contexts/WishlistContext";
+import { CollectionsProvider } from "@/contexts/CollectionsContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -21,6 +22,9 @@ import UnderConstruction from "./pages/UnderConstruction";
 import Landing from "./pages/Landing";
 import Choice from "./pages/Choice";
 import BazingaTV from "./pages/BazingaTV";
+import AllAnime from "./pages/AllAnime";
+import Series from "./pages/Series";
+import MyList from "./pages/MyList";
 import Watch from "./pages/Watch";
 import ProfileSelector from "./pages/ProfileSelector";
 import ManageProfiles from "./pages/ManageProfiles";
@@ -86,6 +90,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <AuthProvider>
+        <CollectionsProvider>
         <WishlistProvider>
           <TooltipProvider>
             <Toaster />
@@ -174,6 +179,30 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="/bazinga-tv/anime"
+                  element={
+                    <RequireProfile>
+                      <AllAnime />
+                    </RequireProfile>
+                  }
+                />
+                <Route
+                  path="/bazinga-tv/series"
+                  element={
+                    <RequireProfile>
+                      <Series />
+                    </RequireProfile>
+                  }
+                />
+                <Route
+                  path="/bazinga-tv/my-list"
+                  element={
+                    <RequireProfile>
+                      <MyList />
+                    </RequireProfile>
+                  }
+                />
+                <Route
                   path="/bazinga-tv/watch/:id"
                   element={
                     <RequireProfile>
@@ -238,6 +267,7 @@ const App = () => (
             </BrowserRouter>
           </TooltipProvider>
         </WishlistProvider>
+        </CollectionsProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>

@@ -316,6 +316,7 @@ const Index = () => {
               title="COMICS"
               comics={homeComics}
               viewAllHref="/comics/all"
+              rows={2}
               onComicClick={handleTileClick}
             />
             <MangaUniverse mode="home" viewAllHref="/manga" />

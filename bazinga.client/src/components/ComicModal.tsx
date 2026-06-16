@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { BookOpen, Heart, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useWishlist } from "@/contexts/WishlistContext";
+import { useCollections } from "@/contexts/CollectionsContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { resolveImageUrl } from "@/lib/images";
 
@@ -33,12 +33,12 @@ const hasComicsAccess = (subscriptionType?: string) => {
  * outline and a tight tag row for genres.
  */
 const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
-  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
+  const { isSaved, toggle } = useCollections();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const comicId = String(comic.id);
-  const inWishlist = isInWishlist(comicId);
+  const inLibrary = isSaved("library", "comic", comicId);
   const subscribed = hasComicsAccess(user?.subscriptionType);
 
   useEffect(() => {
@@ -55,18 +55,15 @@ const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
 
   if (!isOpen) return null;
 
-  const handleWishlistToggle = () => {
-    if (inWishlist) {
-      removeFromWishlist(comicId);
-    } else {
-      addToWishlist({
-        id: comicId,
-        title: comic.title,
-        image: comic.image,
-        creators: comic.creators,
-        price: 0,
-      });
-    }
+  const handleLibraryToggle = () => {
+    void toggle("library", {
+      kind: "comic",
+      contentId: comicId,
+      title: comic.title,
+      image: comic.image,
+      subtitle: comic.creators,
+      payload: comic,
+    });
   };
 
   const handleRead = () => {
@@ -193,9 +190,13 @@ const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
                 </Button>
               )}
               {user && (
-                <Button variant="outline" onClick={handleWishlistToggle}>
-                  <Heart className={`h-4 w-4 ${inWishlist ? "fill-current text-primary" : ""}`} />
-                  {inWishlist ? "In wishlist" : "Add to wishlist"}
+                <Button
+                  variant="outline"
+                  onClick={handleLibraryToggle}
+                  className={inLibrary ? "border-primary bg-primary/10 text-primary hover:bg-primary/20" : ""}
+                >
+                  <Heart className={`h-4 w-4 ${inLibrary ? "fill-current text-primary" : ""}`} />
+                  {inLibrary ? "In Library" : "Add to Library"}
                 </Button>
               )}
             </div>

@@ -14,6 +14,7 @@ interface ComicSectionProps<T extends ComicLike> {
   comics: T[];
   showViewAll?: boolean;
   viewAllHref?: string;
+  rows?: 1 | 2;
   onComicClick?: (comic: T) => void;
 }
 
@@ -29,6 +30,7 @@ function ComicSection<T extends ComicLike>({
   comics,
   showViewAll = true,
   viewAllHref,
+  rows = 1,
   onComicClick,
 }: ComicSectionProps<T>) {
   const hrefForRail = showViewAll ? viewAllHref : undefined;
@@ -37,6 +39,7 @@ function ComicSection<T extends ComicLike>({
       id={id}
       title={title}
       viewAllHref={hrefForRail}
+      rows={rows}
       empty={comics.length === 0}
       emptyMessage="No issues to show yet."
     >

@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 interface RailProps {
   /** Stable id used as the rail's scroll container. */
@@ -10,6 +11,8 @@ interface RailProps {
   viewAllHref?: string;
   /** Tone of the "SEE ALL" link. */
   viewAllTone?: "red" | "orange";
+  /** 1 = single row (default), 2 = double-height horizontal scroller. */
+  rows?: 1 | 2;
   loading?: boolean;
   empty?: boolean;
   emptyMessage?: string;
@@ -34,6 +37,7 @@ const Rail = ({
   title,
   viewAllHref,
   viewAllTone = "red",
+  rows = 1,
   loading,
   empty,
   emptyMessage = "Nothing here yet.",
@@ -76,7 +80,12 @@ const Rail = ({
         </button>
         <div
           id={trackId(id)}
-          className="flex gap-4 md:gap-5 overflow-x-auto px-4 md:px-8 pb-2 pt-6 scroll-smooth snap-x snap-mandatory no-scrollbar"
+          className={cn(
+            "overflow-x-auto px-4 md:px-8 pb-2 pt-6 scroll-smooth no-scrollbar",
+            rows === 2
+              ? "grid grid-rows-2 grid-flow-col auto-cols-max gap-x-4 gap-y-5 md:gap-x-5"
+              : "flex gap-4 md:gap-5 snap-x snap-mandatory"
+          )}
           style={{ scrollbarWidth: "none" }}
         >
           {loading ? (
