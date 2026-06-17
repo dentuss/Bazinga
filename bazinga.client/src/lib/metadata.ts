@@ -282,36 +282,29 @@ export const showMetaLine = (s: SuperheroShowDto): string => {
   return parts.join(" · ");
 };
 
-// ---------- Marvel Comics (Marvel Developer API) -------------------------
+// ---------- Comics metadata (Open Library, no-auth) ----------------------
 
-export type MarvelComicDto = {
+export type ComicMetaDto = {
   id: number;
   title: string;
-  issueNumber?: number | null;
-  description?: string | null;
   image?: string | null;
   thumbnail?: string | null;
+  description?: string | null;
   series?: string | null;
-  format?: string | null;
-  pageCount?: number | null;
-  onSaleDate?: string | null;
-  printPrice?: number | null;
+  year?: number | null;
   creators: string[];
-  characters: string[];
-  detailUrl?: string | null;
+  genres: string[];
 };
 
-export type MarvelPaged = {
-  data: MarvelComicDto[];
-  offset: number;
+export type ComicsMetaPaged = {
+  data: ComicMetaDto[];
+  page: number;
   limit: number;
   total: number;
   configured: boolean;
 };
 
-export type MarvelStatus = { configured: boolean };
-
-const marvelQs = (params: Record<string, string | number | undefined | null>) => {
+const comicsQs = (params: Record<string, string | number | undefined | null>) => {
   const entries = Object.entries(params)
     .filter(([, v]) => v !== undefined && v !== null && v !== "")
     .map(([k, v]) => [k, String(v)] as [string, string]);
@@ -319,39 +312,32 @@ const marvelQs = (params: Record<string, string | number | undefined | null>) =>
   return `?${new URLSearchParams(entries).toString()}`;
 };
 
-export const fetchMarvelStatus = () =>
-  apiFetch<MarvelStatus>("/api/metadata/marvel/status");
-
-export type MarvelComicsOptions = {
+export type ComicsMetaOptions = {
   page?: number;
   limit?: number;
   q?: string;
-  /** "-onsaleDate" (default), "onsaleDate", "-modified", "title". */
-  orderBy?: string;
 };
 
-export const fetchMarvelComics = (opts: MarvelComicsOptions = {}) =>
-  apiFetch<MarvelPaged>(
-    `/api/metadata/marvel/comics${marvelQs({
+export const fetchComicsMeta = (opts: ComicsMetaOptions = {}) =>
+  apiFetch<ComicsMetaPaged>(
+    `/api/metadata/comics${comicsQs({
       page: opts.page ?? 1,
       limit: opts.limit ?? 24,
       q: opts.q,
-      orderBy: opts.orderBy,
     })}`
   );
 
-export const fetchMarvelComic = (id: number) =>
-  apiFetch<MarvelComicDto>(`/api/metadata/marvel/comics/${id}`);
+export const fetchComicMeta = (id: number) =>
+  apiFetch<ComicMetaDto>(`/api/metadata/comics/${id}`);
 
-/** Render-ready creator string for a Marvel issue. */
-export const marvelCreatorsLine = (c: MarvelComicDto): string => {
-  if (c.creators.length === 0) return c.series ?? "Marvel Comics";
+/** Render-ready creator string for a comic issue. */
+export const comicMetaCreators = (c: ComicMetaDto): string => {
+  if (c.creators.length === 0) return c.series ?? "Comics";
   return c.creators.slice(0, 3).join(", ");
 };
 
 /** Short subtitle for cards. */
-export const marvelSubtitle = (c: MarvelComicDto): string => {
-  const year = c.onSaleDate?.slice(0, 4);
-  const creators = marvelCreatorsLine(c);
-  return year ? `${creators} · ${year}` : creators;
+export const comicMetaSubtitle = (c: ComicMetaDto): string => {
+  const creators = comicMetaCreators(c);
+  return c.year ? `${creators} · ${c.year}` : creators;
 };

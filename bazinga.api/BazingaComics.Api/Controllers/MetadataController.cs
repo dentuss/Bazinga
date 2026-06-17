@@ -10,16 +10,16 @@ public class MetadataController : ControllerBase
 {
     private const int MaxLimit = 25;
     private const int MaxSuperheroLimit = 48;
-    private const int MaxMarvelLimit = 50;
+    private const int MaxComicsLimit = 50;
     private readonly IJikanService _jikan;
     private readonly ISuperheroService _supers;
-    private readonly IMarvelService _marvel;
+    private readonly IComicMetadataService _comics;
 
-    public MetadataController(IJikanService jikan, ISuperheroService supers, IMarvelService marvel)
+    public MetadataController(IJikanService jikan, ISuperheroService supers, IComicMetadataService comics)
     {
         _jikan = jikan;
         _supers = supers;
-        _marvel = marvel;
+        _comics = comics;
     }
 
     // ---------- Anime ----------------------------------------------------
@@ -139,30 +139,20 @@ public class MetadataController : ControllerBase
         return dto is null ? NotFound() : Ok(dto);
     }
 
-    // ---------- Marvel comics (Marvel Developer API) ---------------------
+    // ---------- Comics metadata (Open Library) ---------------------------
 
-    [HttpGet("marvel/status")]
-    public ActionResult<MarvelStatusResponse> MarvelStatus()
-        => Ok(new MarvelStatusResponse { Configured = _marvel.IsConfigured });
-
-    [HttpGet("marvel/comics")]
-    public Task<MarvelPagedResponse> MarvelComics(
+    [HttpGet("comics")]
+    public Task<ComicsMetaPagedResponse> Comics(
         [FromQuery] int page = 1,
         [FromQuery] int limit = 24,
         [FromQuery] string? q = null,
-        [FromQuery] string? orderBy = null,
         CancellationToken ct = default)
-        => _marvel.ListComicsAsync(
-            Math.Max(1, page),
-            Math.Clamp(limit, 1, MaxMarvelLimit),
-            q,
-            orderBy,
-            ct);
+        => _comics.ListAsync(Math.Max(1, page), Math.Clamp(limit, 1, MaxComicsLimit), q, ct);
 
-    [HttpGet("marvel/comics/{id:int}")]
-    public async Task<ActionResult<MarvelComicDto>> MarvelComic(int id, CancellationToken ct)
+    [HttpGet("comics/{id:int}")]
+    public async Task<ActionResult<ComicMetaDto>> Comic(int id, CancellationToken ct)
     {
-        var dto = await _marvel.GetComicAsync(id, ct);
+        var dto = await _comics.GetAsync(id, ct);
         return dto is null ? NotFound() : Ok(dto);
     }
 

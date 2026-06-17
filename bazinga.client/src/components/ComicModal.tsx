@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { BookOpen, Heart, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCollections } from "@/contexts/CollectionsContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { resolveImageUrl } from "@/lib/images";
+import { fetchComicMeta } from "@/lib/metadata";
 
 interface ComicModalProps {
   isOpen: boolean;
@@ -19,6 +21,9 @@ interface ComicModalProps {
     series?: string;
     issueNumber?: number;
     genres?: string[];
+    /** Open Library work id — when set and no description was passed in, the
+     * modal lazy-loads the description + genres from the metadata provider. */
+    metaId?: number;
   };
 }
 
@@ -40,6 +45,15 @@ const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
   const comicId = String(comic.id);
   const inLibrary = isSaved("library", "comic", comicId);
   const subscribed = hasComicsAccess(user?.subscriptionType);
+
+  // Lazy-load description + genres for metadata (Open Library) comics that only
+  // arrived with cover/title/creators. No fetch for placeholder/DB comics.
+  const { data: meta } = useQuery({
+    queryKey: ["comic-meta", comic.metaId],
+    queryFn: () => fetchComicMeta(comic.metaId!),
+    enabled: isOpen && comic.metaId != null && !comic.description,
+    staleTime: 60 * 60 * 1000,
+  });
 
   useEffect(() => {
     setExpanded(false);
@@ -73,7 +87,10 @@ const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
 
   const description =
     comic.description ??
+    meta?.description ??
     "An epic adventure awaits in this thrilling comic series. Join your favourite heroes as they battle against the forces of evil and protect the universe from destruction.";
+
+  const genres = comic.genres ?? meta?.genres;
 
   return (
     <div
@@ -155,9 +172,9 @@ const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
               </p>
             )}
 
-            {comic.genres && comic.genres.length > 0 && (
+            {genres && genres.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {comic.genres.map((g) => (
+                {genres.map((g) => (
                   <span
                     key={g}
                     className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"

@@ -4,15 +4,15 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Loader2, Search, Sparkles, X } from "lucide-react";
 import {
-  fetchMarvelComics,
+  comicMetaSubtitle,
+  fetchComicsMeta,
   fetchSuperheroes,
-  marvelSubtitle,
   searchAnime,
   searchManga,
   superheroSubtitle,
   type AnimeDto,
+  type ComicMetaDto,
   type MangaDto,
-  type MarvelComicDto,
   type SuperheroDto,
 } from "@/lib/metadata";
 import {
@@ -40,7 +40,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
   // Modals popped from the search itself — so clicking a result opens the
   // detail right here instead of bouncing to a catalog page.
   const [openComic, setOpenComic] = useState<PlaceholderComic | null>(null);
-  const [openMarvel, setOpenMarvel] = useState<MarvelComicDto | null>(null);
+  const [openMeta, setOpenMeta] = useState<ComicMetaDto | null>(null);
   const [openHero, setOpenHero] = useState<SuperheroDto | null>(null);
   const [openManga, setOpenManga] = useState<MangaDto | null>(null);
   const [openAnime, setOpenAnime] = useState<AnimeDto | null>(null);
@@ -51,7 +51,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
       setQuery("");
       setDebounced("");
       setOpenComic(null);
-      setOpenMarvel(null);
+      setOpenMeta(null);
       setOpenHero(null);
       setOpenManga(null);
       setOpenAnime(null);
@@ -61,7 +61,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
       if (e.key === "Escape") {
         // Layered close: dismiss top-most modal first, then the overlay.
         if (openComic) return setOpenComic(null);
-        if (openMarvel) return setOpenMarvel(null);
+        if (openMeta) return setOpenMeta(null);
         if (openHero) return setOpenHero(null);
         if (openManga) return setOpenManga(null);
         if (openAnime) return setOpenAnime(null);
@@ -70,7 +70,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose, openComic, openMarvel, openHero, openManga, openAnime]);
+  }, [open, onClose, openComic, openMeta, openHero, openManga, openAnime]);
 
   // Debounce typing.
   useEffect(() => {
@@ -115,22 +115,21 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
     staleTime: 60 * 1000,
   });
 
-  // Marvel issues by title-prefix. We always issue this query; if the server
-  // has no Marvel key configured the response carries configured=false and
-  // we just don't render that section.
-  const marvelIssues = useQuery({
-    queryKey: ["master-search:marvel", debounced],
-    queryFn: () => fetchMarvelComics({ q: debounced, limit: 5, orderBy: "-onsaleDate" }),
+  // Live superhero-comic search (Open Library, free, no-auth) — restricted to
+  // the "Comic books, strips" subject upstream so results stay on-genre.
+  const metaIssues = useQuery({
+    queryKey: ["master-search:comics-meta", debounced],
+    queryFn: () => fetchComicsMeta({ q: debounced, limit: 5 }),
     enabled,
     staleTime: 60 * 1000,
   });
 
   const totalLoading =
-    heroes.isFetching || manga.isFetching || anime.isFetching || marvelIssues.isFetching;
+    heroes.isFetching || manga.isFetching || anime.isFetching || metaIssues.isFetching;
   const heroHits = heroes.data?.data ?? [];
   const mangaHits = manga.data?.data ?? [];
   const animeHits = anime.data?.data ?? [];
-  const marvelHits = marvelIssues.data?.data ?? [];
+  const metaHits = metaIssues.data?.data ?? [];
   const empty =
     enabled &&
     !totalLoading &&
@@ -138,7 +137,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
     heroHits.length === 0 &&
     mangaHits.length === 0 &&
     animeHits.length === 0 &&
-    marvelHits.length === 0;
+    metaHits.length === 0;
 
   const goToFiltered = (target: "comics" | "characters" | "manga" | "anime") => {
     const q = encodeURIComponent(debounced);
@@ -269,20 +268,20 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
                 ))}
               </Section>
             )}
-            {marvelHits.length > 0 && (
+            {metaHits.length > 0 && (
               <Section
-                title="Marvel Comics"
-                count={marvelHits.length}
+                title="Superhero Comics"
+                count={metaHits.length}
                 onSeeAll={() => goToFiltered("comics")}
               >
-                {marvelHits.map((m: MarvelComicDto) => (
+                {metaHits.map((m: ComicMetaDto) => (
                   <Result
-                    key={`marvel:${m.id}`}
+                    key={`meta:${m.id}`}
                     image={m.thumbnail ?? m.image ?? ""}
                     title={m.title}
-                    subtitle={marvelSubtitle(m)}
-                    badge={m.format ?? undefined}
-                    onClick={() => setOpenMarvel(m)}
+                    subtitle={comicMetaSubtitle(m)}
+                    badge={m.year ? String(m.year) : undefined}
+                    onClick={() => setOpenMeta(m)}
                   />
                 ))}
               </Section>
@@ -365,19 +364,19 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
           }}
         />
       )}
-      {openMarvel && (
+      {openMeta && (
         <ComicModal
           isOpen={true}
-          onClose={() => setOpenMarvel(null)}
+          onClose={() => setOpenMeta(null)}
           comic={{
-            id: openMarvel.id,
-            title: openMarvel.title,
-            image: openMarvel.image ?? openMarvel.thumbnail ?? "",
-            creators: openMarvel.creators.join(", "),
-            description: openMarvel.description ?? undefined,
-            series: openMarvel.series ?? undefined,
-            year: openMarvel.onSaleDate?.slice(0, 4),
-            issueNumber: openMarvel.issueNumber ?? undefined,
+            id: openMeta.id,
+            title: openMeta.title,
+            image: openMeta.image ?? openMeta.thumbnail ?? "",
+            creators: openMeta.creators.join(", "),
+            description: openMeta.description ?? undefined,
+            series: openMeta.series ?? undefined,
+            year: openMeta.year ? String(openMeta.year) : undefined,
+            metaId: openMeta.id,
           }}
         />
       )}

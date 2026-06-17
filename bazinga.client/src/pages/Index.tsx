@@ -12,11 +12,11 @@ import MangaModal from "@/components/MangaModal";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import {
-  fetchMarvelComics,
+  comicMetaCreators,
+  fetchComicsMeta,
   fetchTopManga,
-  marvelCreatorsLine,
+  type ComicMetaDto,
   type MangaDto,
-  type MarvelComicDto,
 } from "@/lib/metadata";
 import {
   placeholderComics,
@@ -45,6 +45,8 @@ interface DisplayComic {
   image: string;
   description?: string;
   createdAt?: string;
+  /** Open Library work id — when set, the modal lazy-loads description + genres. */
+  metaId?: number;
 }
 
 const HOME_COMIC_LIMIT = 20; // length of the horizontal rail on the homepage
@@ -59,7 +61,7 @@ interface MixedTile {
   score?: number | null;
   _comic?: DisplayComic;
   _manga?: MangaDto;
-  _marvel?: MarvelComicDto;
+  _meta?: ComicMetaDto;
 }
 
 const Index = () => {
@@ -85,22 +87,22 @@ const Index = () => {
     staleTime: 30 * 60 * 1000,
   });
 
-  // Real Marvel issues for the COMICS rail. When the server has no API key
-  // configured the response carries an empty list + configured=false, and we
-  // fall back to the curated placeholder set below.
-  const marvelHomeQuery = useQuery({
-    queryKey: ["marvel-comics", "home"],
-    queryFn: () => fetchMarvelComics({ limit: 24, orderBy: "-onsaleDate" }),
+  // Real superhero comic covers (Open Library, no auth). If the upstream is
+  // unreachable the response carries an empty list and we fall back to the
+  // curated placeholder set below.
+  const comicsMetaQuery = useQuery({
+    queryKey: ["comics-meta", "home", 1],
+    queryFn: () => fetchComicsMeta({ page: 1, limit: 24 }),
     staleTime: 60 * 60 * 1000,
   });
-  const marvelNewQuery = useQuery({
-    queryKey: ["marvel-comics", "new-this-week"],
-    queryFn: () => fetchMarvelComics({ limit: 12, orderBy: "-modified" }),
+  const comicsMetaNewQuery = useQuery({
+    queryKey: ["comics-meta", "home", 2],
+    queryFn: () => fetchComicsMeta({ page: 2, limit: 12 }),
     staleTime: 30 * 60 * 1000,
   });
-  const marvelConfigured = marvelHomeQuery.data?.configured === true;
-  const marvelHomeIssues = marvelHomeQuery.data?.data ?? [];
-  const marvelNewIssues = marvelNewQuery.data?.data ?? [];
+  const metaHomeIssues = comicsMetaQuery.data?.data ?? [];
+  const metaNewIssues = comicsMetaNewQuery.data?.data ?? [];
+  const metaConfigured = metaHomeIssues.length > 0;
 
   const dbComics = useMemo<DisplayComic[]>(
     () =>
@@ -183,19 +185,19 @@ const Index = () => {
   }, [searchQuery, browseFilter, allComics]);
 
   /**
-   * "New This Week" mixes the newest comic-side issues with the freshest manga
-   * scores. When Marvel is configured the comic half comes from the real
-   * Marvel feed; otherwise we use the placeholder catalog as before.
+   * "New This Week" mixes comic-side issues with the freshest manga scores.
+   * When live comic covers are available the comic half comes from Open
+   * Library; otherwise we use the placeholder catalog as before.
    */
   const newThisWeek = useMemo<MixedTile[]>(() => {
     const half = Math.ceil(NEW_THIS_WEEK_TOTAL / 2);
 
-    const comicTiles: MixedTile[] = marvelConfigured && marvelNewIssues.length > 0
-      ? marvelNewIssues.slice(0, half).map((m) => ({
+    const comicTiles: MixedTile[] = metaConfigured && metaNewIssues.length > 0
+      ? metaNewIssues.slice(0, half).map((m) => ({
           image: m.image ?? m.thumbnail ?? "",
           title: m.title,
-          creators: marvelCreatorsLine(m),
-          _marvel: m,
+          creators: comicMetaCreators(m),
+          _meta: m,
         }))
       : [...allComics]
           .sort(
@@ -227,15 +229,15 @@ const Index = () => {
       if (mangaSlice[i]) out.push(mangaSlice[i]);
     }
     return out.slice(0, NEW_THIS_WEEK_TOTAL);
-  }, [allComics, topManga.data, marvelConfigured, marvelNewIssues]);
+  }, [allComics, topManga.data, metaConfigured, metaNewIssues]);
 
   const homeComics = useMemo<MixedTile[]>(() => {
-    if (marvelConfigured && marvelHomeIssues.length > 0) {
-      return marvelHomeIssues.slice(0, HOME_COMIC_LIMIT).map((m) => ({
+    if (metaConfigured && metaHomeIssues.length > 0) {
+      return metaHomeIssues.slice(0, HOME_COMIC_LIMIT).map((m) => ({
         image: m.image ?? m.thumbnail ?? "",
         title: m.title,
-        creators: marvelCreatorsLine(m),
-        _marvel: m,
+        creators: comicMetaCreators(m),
+        _meta: m,
       }));
     }
     return allComics.slice(0, HOME_COMIC_LIMIT).map((c) => ({
@@ -244,7 +246,7 @@ const Index = () => {
       creators: c.creators,
       _comic: c,
     }));
-  }, [allComics, marvelConfigured, marvelHomeIssues]);
+  }, [allComics, metaConfigured, metaHomeIssues]);
 
   const isFiltered = Boolean(searchQuery) || Boolean(browseFilter.value) || viewAll;
 
@@ -253,17 +255,18 @@ const Index = () => {
       setSelectedManga(item._manga);
       return;
     }
-    if (item._marvel) {
-      const m = item._marvel;
+    if (item._meta) {
+      const m = item._meta;
       setSelectedComic({
         id: m.id,
         title: m.title,
         series: m.series ?? "",
-        character: m.characters[0] ?? "",
-        creators: m.creators.join(", "),
+        character: "",
+        creators: comicMetaCreators(m),
         image: m.image ?? m.thumbnail ?? "",
         description: m.description ?? undefined,
-        createdAt: m.onSaleDate ?? undefined,
+        createdAt: m.year ? `${m.year}` : undefined,
+        metaId: m.id,
       });
       setIsModalOpen(true);
       return;
@@ -292,6 +295,7 @@ const Index = () => {
         description: selectedComic.description,
         series: selectedComic.series,
         year: selectedComic.createdAt?.slice(0, 4),
+        metaId: selectedComic.metaId,
       }
     : null;
 

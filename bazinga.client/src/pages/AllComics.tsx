@@ -8,7 +8,7 @@ import ComicCard from "@/components/ComicCard";
 import ComicModal from "@/components/ComicModal";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
-import { fetchMarvelComics } from "@/lib/metadata";
+import { comicMetaCreators, fetchComicsMeta } from "@/lib/metadata";
 import {
   placeholderComics,
   type PlaceholderComic,
@@ -25,6 +25,7 @@ interface DisplayComic {
   image: string;
   description?: string;
   createdAt?: string;
+  metaId?: number;
 }
 
 const PAGE_SIZE = 18; // three rows × six cards on lg+
@@ -45,39 +46,38 @@ const AllComics = () => {
     queryFn: () => apiFetch<ComicDto[]>("/api/comics"),
   });
 
-  // Real Marvel issues, paginated server-side. Marvel's title search is a
-  // prefix-only match (`titleStartsWith=`), so when the user lands here from a
-  // master-search free-text query we still pass it through — Marvel will match
-  // it as far as it can, and the local filter below tightens the rest.
-  const marvelQuery = useQuery({
-    queryKey: ["marvel-comics", "catalog", masterQuery || "", page],
+  // Real comic covers (Open Library), paginated server-side. Free-text search
+  // is passed straight through and restricted to the comics subject upstream.
+  const metaQuery = useQuery({
+    queryKey: ["comics-meta", "catalog", masterQuery || "", page],
     queryFn: () =>
-      fetchMarvelComics({
+      fetchComicsMeta({
         page,
         limit: PAGE_SIZE,
         q: masterQuery || undefined,
-        orderBy: "-onsaleDate",
       }),
     placeholderData: keepPreviousData,
     staleTime: 30 * 60 * 1000,
   });
-  const marvelConfigured = marvelQuery.data?.configured === true;
-  const marvelTotal = marvelQuery.data?.total ?? 0;
+  const metaIssues = metaQuery.data?.data ?? [];
+  const metaConfigured = metaIssues.length > 0;
+  const metaTotal = metaQuery.data?.total ?? 0;
 
-  // Three sources, in order of preference: real Marvel data → DB comics →
+  // Three sources, in order of preference: live comic metadata → DB comics →
   // the placeholder catalogue. We collapse them into the same DisplayComic
   // shape so the rest of the page is unchanged.
   const all = useMemo<DisplayComic[]>(() => {
-    if (marvelConfigured && (marvelQuery.data?.data?.length ?? 0) > 0) {
-      return marvelQuery.data!.data.map<DisplayComic>((m) => ({
+    if (metaIssues.length > 0) {
+      return metaIssues.map<DisplayComic>((m) => ({
         id: m.id,
         title: m.title,
         series: m.series ?? "",
-        character: m.characters[0] ?? "",
-        creators: m.creators.join(", "),
+        character: "",
+        creators: comicMetaCreators(m),
         image: m.image ?? m.thumbnail ?? "",
         description: m.description ?? undefined,
-        createdAt: m.onSaleDate ?? undefined,
+        createdAt: m.year ? `${m.year}` : undefined,
+        metaId: m.id,
       }));
     }
     if (dbComics.length > 0) {
@@ -102,13 +102,13 @@ const AllComics = () => {
       description: p.description,
       createdAt: p.releaseDate,
     }));
-  }, [dbComics, marvelConfigured, marvelQuery.data]);
+  }, [dbComics, metaIssues]);
 
-  // When we're paging through Marvel server-side, the local search filter is
-  // a no-op (server already filtered). For DB / placeholder sources we apply
+  // When we're paging live metadata server-side, the local search filter is a
+  // no-op (the server already filtered). For DB / placeholder sources we apply
   // the same in-memory filter we always did.
   const filtered = useMemo(() => {
-    if (marvelConfigured) return all;
+    if (metaConfigured) return all;
     if (!masterQuery) return all;
     const q = masterQuery.toLowerCase();
     return all.filter(
@@ -118,7 +118,7 @@ const AllComics = () => {
         c.series.toLowerCase().includes(q) ||
         c.character.toLowerCase().includes(q)
     );
-  }, [masterQuery, all, marvelConfigured]);
+  }, [masterQuery, all, metaConfigured]);
 
   // Deep-link: ?openComic=<id> pops the modal as if the card was clicked.
   const openComicId = searchParams.get("openComic");
@@ -132,12 +132,12 @@ const AllComics = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openComicId, all]);
 
-  // Marvel paginates server-side, so the slice is identity (already 1 page).
-  // For DB / placeholder modes we still need to slice locally.
-  const totalCount = marvelConfigured ? marvelTotal : filtered.length;
+  // Live metadata paginates server-side, so the slice is identity (already one
+  // page). For DB / placeholder modes we still slice locally.
+  const totalCount = metaConfigured ? metaTotal : filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
-  const pageItems = marvelConfigured
+  const pageItems = metaConfigured
     ? filtered
     : filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
@@ -161,10 +161,10 @@ const AllComics = () => {
               All Comics
             </h1>
             <p className="mt-4 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
-              {marvelConfigured
+              {metaConfigured
                 ? masterQuery
-                  ? `${totalCount.toLocaleString()} issues matching "${masterQuery}", sourced live from Marvel.`
-                  : `${totalCount.toLocaleString()} issues sourced live from the Marvel Comics catalogue.`
+                  ? `${totalCount.toLocaleString()} issues matching "${masterQuery}", sourced live from Open Library.`
+                  : `${totalCount.toLocaleString()} superhero issues sourced live from Open Library.`
                 : masterQuery
                   ? `${filtered.length} comics matching "${masterQuery}".`
                   : `${all.length} issues across every series in the Bazinga catalogue.`}
@@ -240,6 +240,7 @@ const AllComics = () => {
             description: selected.description,
             series: selected.series,
             year: selected.createdAt?.slice(0, 4),
+            metaId: selected.metaId,
           }}
         />
       )}
