@@ -11,7 +11,13 @@ import MangaUniverse from "@/components/MangaUniverse";
 import MangaModal from "@/components/MangaModal";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
-import { fetchTopManga, type MangaDto } from "@/lib/metadata";
+import {
+  fetchMarvelComics,
+  fetchTopManga,
+  marvelCreatorsLine,
+  type MangaDto,
+  type MarvelComicDto,
+} from "@/lib/metadata";
 import {
   placeholderComics,
   type PlaceholderComic,
@@ -53,6 +59,7 @@ interface MixedTile {
   score?: number | null;
   _comic?: DisplayComic;
   _manga?: MangaDto;
+  _marvel?: MarvelComicDto;
 }
 
 const Index = () => {
@@ -77,6 +84,23 @@ const Index = () => {
     queryFn: () => fetchTopManga(1, 12),
     staleTime: 30 * 60 * 1000,
   });
+
+  // Real Marvel issues for the COMICS rail. When the server has no API key
+  // configured the response carries an empty list + configured=false, and we
+  // fall back to the curated placeholder set below.
+  const marvelHomeQuery = useQuery({
+    queryKey: ["marvel-comics", "home"],
+    queryFn: () => fetchMarvelComics({ limit: 24, orderBy: "-onsaleDate" }),
+    staleTime: 60 * 60 * 1000,
+  });
+  const marvelNewQuery = useQuery({
+    queryKey: ["marvel-comics", "new-this-week"],
+    queryFn: () => fetchMarvelComics({ limit: 12, orderBy: "-modified" }),
+    staleTime: 30 * 60 * 1000,
+  });
+  const marvelConfigured = marvelHomeQuery.data?.configured === true;
+  const marvelHomeIssues = marvelHomeQuery.data?.data ?? [];
+  const marvelNewIssues = marvelNewQuery.data?.data ?? [];
 
   const dbComics = useMemo<DisplayComic[]>(
     () =>
@@ -158,19 +182,34 @@ const Index = () => {
     return list;
   }, [searchQuery, browseFilter, allComics]);
 
-  /** "New This Week" = newest 3 comics + 3 newest top manga titles, mixed. */
+  /**
+   * "New This Week" mixes the newest comic-side issues with the freshest manga
+   * scores. When Marvel is configured the comic half comes from the real
+   * Marvel feed; otherwise we use the placeholder catalog as before.
+   */
   const newThisWeek = useMemo<MixedTile[]>(() => {
-    const sortedComics: MixedTile[] = [...allComics]
-      .sort(
-        (a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
-      )
-      .slice(0, Math.ceil(NEW_THIS_WEEK_TOTAL / 2))
-      .map((c) => ({
-        image: c.image,
-        title: c.title,
-        creators: c.creators,
-        _comic: c,
-      }));
+    const half = Math.ceil(NEW_THIS_WEEK_TOTAL / 2);
+
+    const comicTiles: MixedTile[] = marvelConfigured && marvelNewIssues.length > 0
+      ? marvelNewIssues.slice(0, half).map((m) => ({
+          image: m.image ?? m.thumbnail ?? "",
+          title: m.title,
+          creators: marvelCreatorsLine(m),
+          _marvel: m,
+        }))
+      : [...allComics]
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
+          )
+          .slice(0, half)
+          .map((c) => ({
+            image: c.image,
+            title: c.title,
+            creators: c.creators,
+            _comic: c,
+          }));
+
     const mangaSlice: MixedTile[] = (topManga.data?.data ?? [])
       .slice(0, Math.floor(NEW_THIS_WEEK_TOTAL / 2))
       .map((m) => ({
@@ -182,30 +221,51 @@ const Index = () => {
       }));
     // Interleave so it doesn't look segregated.
     const out: MixedTile[] = [];
-    const max = Math.max(sortedComics.length, mangaSlice.length);
+    const max = Math.max(comicTiles.length, mangaSlice.length);
     for (let i = 0; i < max; i++) {
-      if (sortedComics[i]) out.push(sortedComics[i]);
+      if (comicTiles[i]) out.push(comicTiles[i]);
       if (mangaSlice[i]) out.push(mangaSlice[i]);
     }
     return out.slice(0, NEW_THIS_WEEK_TOTAL);
-  }, [allComics, topManga.data]);
+  }, [allComics, topManga.data, marvelConfigured, marvelNewIssues]);
 
-  const homeComics = useMemo<MixedTile[]>(
-    () =>
-      allComics.slice(0, HOME_COMIC_LIMIT).map((c) => ({
-        image: c.image,
-        title: c.title,
-        creators: c.creators,
-        _comic: c,
-      })),
-    [allComics]
-  );
+  const homeComics = useMemo<MixedTile[]>(() => {
+    if (marvelConfigured && marvelHomeIssues.length > 0) {
+      return marvelHomeIssues.slice(0, HOME_COMIC_LIMIT).map((m) => ({
+        image: m.image ?? m.thumbnail ?? "",
+        title: m.title,
+        creators: marvelCreatorsLine(m),
+        _marvel: m,
+      }));
+    }
+    return allComics.slice(0, HOME_COMIC_LIMIT).map((c) => ({
+      image: c.image,
+      title: c.title,
+      creators: c.creators,
+      _comic: c,
+    }));
+  }, [allComics, marvelConfigured, marvelHomeIssues]);
 
   const isFiltered = Boolean(searchQuery) || Boolean(browseFilter.value) || viewAll;
 
   const handleTileClick = (item: MixedTile) => {
     if (item._manga) {
       setSelectedManga(item._manga);
+      return;
+    }
+    if (item._marvel) {
+      const m = item._marvel;
+      setSelectedComic({
+        id: m.id,
+        title: m.title,
+        series: m.series ?? "",
+        character: m.characters[0] ?? "",
+        creators: m.creators.join(", "),
+        image: m.image ?? m.thumbnail ?? "",
+        description: m.description ?? undefined,
+        createdAt: m.onSaleDate ?? undefined,
+      });
+      setIsModalOpen(true);
       return;
     }
     if (item._comic) {
@@ -231,6 +291,7 @@ const Index = () => {
         creators: selectedComic.creators,
         description: selectedComic.description,
         series: selectedComic.series,
+        year: selectedComic.createdAt?.slice(0, 4),
       }
     : null;
 

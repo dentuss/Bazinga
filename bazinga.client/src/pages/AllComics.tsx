@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -8,6 +8,7 @@ import ComicCard from "@/components/ComicCard";
 import ComicModal from "@/components/ComicModal";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
+import { fetchMarvelComics } from "@/lib/metadata";
 import {
   placeholderComics,
   type PlaceholderComic,
@@ -35,12 +36,50 @@ const AllComics = () => {
   const [selected, setSelected] = useState<DisplayComic | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
+  useEffect(() => {
+    setPage(1);
+  }, [masterQuery]);
+
   const { data: dbComics = [] } = useQuery<ComicDto[]>({
     queryKey: ["comics"],
     queryFn: () => apiFetch<ComicDto[]>("/api/comics"),
   });
 
+  // Real Marvel issues, paginated server-side. Marvel's title search is a
+  // prefix-only match (`titleStartsWith=`), so when the user lands here from a
+  // master-search free-text query we still pass it through — Marvel will match
+  // it as far as it can, and the local filter below tightens the rest.
+  const marvelQuery = useQuery({
+    queryKey: ["marvel-comics", "catalog", masterQuery || "", page],
+    queryFn: () =>
+      fetchMarvelComics({
+        page,
+        limit: PAGE_SIZE,
+        q: masterQuery || undefined,
+        orderBy: "-onsaleDate",
+      }),
+    placeholderData: keepPreviousData,
+    staleTime: 30 * 60 * 1000,
+  });
+  const marvelConfigured = marvelQuery.data?.configured === true;
+  const marvelTotal = marvelQuery.data?.total ?? 0;
+
+  // Three sources, in order of preference: real Marvel data → DB comics →
+  // the placeholder catalogue. We collapse them into the same DisplayComic
+  // shape so the rest of the page is unchanged.
   const all = useMemo<DisplayComic[]>(() => {
+    if (marvelConfigured && (marvelQuery.data?.data?.length ?? 0) > 0) {
+      return marvelQuery.data!.data.map<DisplayComic>((m) => ({
+        id: m.id,
+        title: m.title,
+        series: m.series ?? "",
+        character: m.characters[0] ?? "",
+        creators: m.creators.join(", "),
+        image: m.image ?? m.thumbnail ?? "",
+        description: m.description ?? undefined,
+        createdAt: m.onSaleDate ?? undefined,
+      }));
+    }
     if (dbComics.length > 0) {
       return dbComics.map((c) => ({
         id: c.id,
@@ -63,9 +102,13 @@ const AllComics = () => {
       description: p.description,
       createdAt: p.releaseDate,
     }));
-  }, [dbComics]);
+  }, [dbComics, marvelConfigured, marvelQuery.data]);
 
+  // When we're paging through Marvel server-side, the local search filter is
+  // a no-op (server already filtered). For DB / placeholder sources we apply
+  // the same in-memory filter we always did.
   const filtered = useMemo(() => {
+    if (marvelConfigured) return all;
     if (!masterQuery) return all;
     const q = masterQuery.toLowerCase();
     return all.filter(
@@ -75,7 +118,7 @@ const AllComics = () => {
         c.series.toLowerCase().includes(q) ||
         c.character.toLowerCase().includes(q)
     );
-  }, [masterQuery, all]);
+  }, [masterQuery, all, marvelConfigured]);
 
   // Deep-link: ?openComic=<id> pops the modal as if the card was clicked.
   const openComicId = searchParams.get("openComic");
@@ -89,9 +132,14 @@ const AllComics = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openComicId, all]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // Marvel paginates server-side, so the slice is identity (already 1 page).
+  // For DB / placeholder modes we still need to slice locally.
+  const totalCount = marvelConfigured ? marvelTotal : filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
-  const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pageItems = marvelConfigured
+    ? filtered
+    : filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,9 +161,13 @@ const AllComics = () => {
               All Comics
             </h1>
             <p className="mt-4 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
-              {masterQuery
-                ? `${filtered.length} comics matching "${masterQuery}".`
-                : `${all.length} issues across every series in the Bazinga catalogue.`}
+              {marvelConfigured
+                ? masterQuery
+                  ? `${totalCount.toLocaleString()} issues matching "${masterQuery}", sourced live from Marvel.`
+                  : `${totalCount.toLocaleString()} issues sourced live from the Marvel Comics catalogue.`
+                : masterQuery
+                  ? `${filtered.length} comics matching "${masterQuery}".`
+                  : `${all.length} issues across every series in the Bazinga catalogue.`}
             </p>
           </div>
         </section>
@@ -186,6 +238,8 @@ const AllComics = () => {
             image: selected.image,
             creators: selected.creators,
             description: selected.description,
+            series: selected.series,
+            year: selected.createdAt?.slice(0, 4),
           }}
         />
       )}

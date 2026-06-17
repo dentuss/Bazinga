@@ -10,13 +10,16 @@ public class MetadataController : ControllerBase
 {
     private const int MaxLimit = 25;
     private const int MaxSuperheroLimit = 48;
+    private const int MaxMarvelLimit = 50;
     private readonly IJikanService _jikan;
     private readonly ISuperheroService _supers;
+    private readonly IMarvelService _marvel;
 
-    public MetadataController(IJikanService jikan, ISuperheroService supers)
+    public MetadataController(IJikanService jikan, ISuperheroService supers, IMarvelService marvel)
     {
         _jikan = jikan;
         _supers = supers;
+        _marvel = marvel;
     }
 
     // ---------- Anime ----------------------------------------------------
@@ -133,6 +136,33 @@ public class MetadataController : ControllerBase
     public async Task<ActionResult<SuperheroShowDto>> SuperheroShow(int id, CancellationToken ct)
     {
         var dto = await _supers.GetShowByIdAsync(id, ct);
+        return dto is null ? NotFound() : Ok(dto);
+    }
+
+    // ---------- Marvel comics (Marvel Developer API) ---------------------
+
+    [HttpGet("marvel/status")]
+    public ActionResult<MarvelStatusResponse> MarvelStatus()
+        => Ok(new MarvelStatusResponse { Configured = _marvel.IsConfigured });
+
+    [HttpGet("marvel/comics")]
+    public Task<MarvelPagedResponse> MarvelComics(
+        [FromQuery] int page = 1,
+        [FromQuery] int limit = 24,
+        [FromQuery] string? q = null,
+        [FromQuery] string? orderBy = null,
+        CancellationToken ct = default)
+        => _marvel.ListComicsAsync(
+            Math.Max(1, page),
+            Math.Clamp(limit, 1, MaxMarvelLimit),
+            q,
+            orderBy,
+            ct);
+
+    [HttpGet("marvel/comics/{id:int}")]
+    public async Task<ActionResult<MarvelComicDto>> MarvelComic(int id, CancellationToken ct)
+    {
+        var dto = await _marvel.GetComicAsync(id, ct);
         return dto is null ? NotFound() : Ok(dto);
     }
 

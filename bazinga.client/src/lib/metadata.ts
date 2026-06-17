@@ -281,3 +281,77 @@ export const showMetaLine = (s: SuperheroShowDto): string => {
   if (s.rating) parts.push(`★ ${s.rating.toFixed(1)}`);
   return parts.join(" · ");
 };
+
+// ---------- Marvel Comics (Marvel Developer API) -------------------------
+
+export type MarvelComicDto = {
+  id: number;
+  title: string;
+  issueNumber?: number | null;
+  description?: string | null;
+  image?: string | null;
+  thumbnail?: string | null;
+  series?: string | null;
+  format?: string | null;
+  pageCount?: number | null;
+  onSaleDate?: string | null;
+  printPrice?: number | null;
+  creators: string[];
+  characters: string[];
+  detailUrl?: string | null;
+};
+
+export type MarvelPaged = {
+  data: MarvelComicDto[];
+  offset: number;
+  limit: number;
+  total: number;
+  configured: boolean;
+};
+
+export type MarvelStatus = { configured: boolean };
+
+const marvelQs = (params: Record<string, string | number | undefined | null>) => {
+  const entries = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([k, v]) => [k, String(v)] as [string, string]);
+  if (entries.length === 0) return "";
+  return `?${new URLSearchParams(entries).toString()}`;
+};
+
+export const fetchMarvelStatus = () =>
+  apiFetch<MarvelStatus>("/api/metadata/marvel/status");
+
+export type MarvelComicsOptions = {
+  page?: number;
+  limit?: number;
+  q?: string;
+  /** "-onsaleDate" (default), "onsaleDate", "-modified", "title". */
+  orderBy?: string;
+};
+
+export const fetchMarvelComics = (opts: MarvelComicsOptions = {}) =>
+  apiFetch<MarvelPaged>(
+    `/api/metadata/marvel/comics${marvelQs({
+      page: opts.page ?? 1,
+      limit: opts.limit ?? 24,
+      q: opts.q,
+      orderBy: opts.orderBy,
+    })}`
+  );
+
+export const fetchMarvelComic = (id: number) =>
+  apiFetch<MarvelComicDto>(`/api/metadata/marvel/comics/${id}`);
+
+/** Render-ready creator string for a Marvel issue. */
+export const marvelCreatorsLine = (c: MarvelComicDto): string => {
+  if (c.creators.length === 0) return c.series ?? "Marvel Comics";
+  return c.creators.slice(0, 3).join(", ");
+};
+
+/** Short subtitle for cards. */
+export const marvelSubtitle = (c: MarvelComicDto): string => {
+  const year = c.onSaleDate?.slice(0, 4);
+  const creators = marvelCreatorsLine(c);
+  return year ? `${creators} · ${year}` : creators;
+};

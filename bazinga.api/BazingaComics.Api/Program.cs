@@ -41,6 +41,16 @@ builder.Services.Configure<StripeOptions>(opt =>
     opt.PublishableKey = Environment.GetEnvironmentVariable("STRIPE_PUBLISHABLE_KEY") ?? section.PublishableKey;
 });
 
+// Configuration: Marvel Developer API. Both keys are issued for free at
+// developer.marvel.com. When neither is configured the comics endpoints
+// quietly return empty lists and the client falls back to placeholder covers.
+builder.Services.Configure<MarvelOptions>(opt =>
+{
+    var section = builder.Configuration.GetSection(MarvelOptions.SectionName).Get<MarvelOptions>() ?? new MarvelOptions();
+    opt.PublicKey = Environment.GetEnvironmentVariable("MARVEL_PUBLIC_KEY") ?? section.PublicKey;
+    opt.PrivateKey = Environment.GetEnvironmentVariable("MARVEL_PRIVATE_KEY") ?? section.PrivateKey;
+});
+
 // EF Core + MySQL via Pomelo
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Missing connection string 'DefaultConnection'.");
@@ -130,6 +140,16 @@ builder.Services.AddHttpClient<IJikanService, JikanService>(client =>
 // each upstream is hit at most a handful of times per day.
 builder.Services.AddHttpClient<ISuperheroService, SuperheroService>(client =>
 {
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("BazingaComics/1.0 (+https://bazinga.local)");
+});
+
+// Marvel Developer API — issued at developer.marvel.com, signed per-request.
+// When no key is configured the service stays "graceful disabled" and the
+// metadata controller returns an empty list so the client can fall back.
+builder.Services.AddHttpClient<IMarvelService, MarvelService>(client =>
+{
+    client.BaseAddress = new Uri("https://gateway.marvel.com/v1/public/");
     client.Timeout = TimeSpan.FromSeconds(15);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("BazingaComics/1.0 (+https://bazinga.local)");
 });
