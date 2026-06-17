@@ -88,6 +88,11 @@ public class AuthController : ControllerBase
             return Unauthorized("Invalid credentials.");
         }
 
+        if (RequiresTwoFactor(user))
+        {
+            return Ok(await ChallengeResponseAsync(user, ct));
+        }
+
         return Ok(BuildResponse(user));
     }
 
@@ -325,9 +330,137 @@ public class AuthController : ControllerBase
         Phone = user.Phone,
         SubscriptionType = user.SubscriptionType,
         SubscriptionExpiration = user.SubscriptionExpiration?.ToString("yyyy-MM-dd"),
+        TwoFactorEnabled = user.TwoFactorEnabled,
         CreatedAt = user.CreatedAt == default ? null : user.CreatedAt.ToString("o"),
         UpdatedAt = user.UpdatedAt == default ? null : user.UpdatedAt.ToString("o")
     };
+
+    // -----------------------------------------------------------------------
+    // Two-factor authentication (TOTP — Google Authenticator etc.)
+    // -----------------------------------------------------------------------
+
+    private const int TwoFactorChallengeLifetimeMinutes = 5;
+    private const string TwoFactorIssuer = "Bazinga";
+
+    private bool RequiresTwoFactor(User user) =>
+        user.TwoFactorEnabled && !string.IsNullOrEmpty(user.TwoFactorSecret);
+
+    private async Task<AuthResponse> ChallengeResponseAsync(User user, CancellationToken ct)
+    {
+        // Invalidate older live challenges, then mint a fresh one.
+        await _db.TwoFactorChallenges
+            .Where(c => c.UserId == user.Id && c.ConsumedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ConsumedAt, DateTime.UtcNow), ct);
+
+        var rawToken = SignupTokens.Generate();
+        _db.TwoFactorChallenges.Add(new TwoFactorChallenge
+        {
+            UserId = user.Id,
+            TokenHash = SignupTokens.Hash(rawToken),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(TwoFactorChallengeLifetimeMinutes),
+        });
+        await _db.SaveChangesAsync(ct);
+
+        return new AuthResponse
+        {
+            TwoFactorRequired = true,
+            ChallengeToken = rawToken,
+            TwoFactorEnabled = true,
+            Email = user.Email,
+        };
+    }
+
+    /// <summary>Begin enrollment: mint a pending secret and return the otpauth URI for the QR code.</summary>
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    [HttpPost("2fa/setup")]
+    public async Task<ActionResult<TwoFactorSetupResponse>> TwoFactorSetup(CancellationToken ct)
+    {
+        var user = await CurrentUser.GetAsync(User, _db, ct);
+        if (user is null) return Unauthorized();
+        if (user.TwoFactorEnabled)
+        {
+            return BadRequest("Two-factor authentication is already enabled. Disable it first to re-configure.");
+        }
+
+        var secret = Totp.GenerateSecret();
+        user.TwoFactorSecret = secret; // pending until /2fa/confirm
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new TwoFactorSetupResponse
+        {
+            Secret = secret,
+            OtpauthUri = Totp.BuildOtpAuthUri(TwoFactorIssuer, user.Email, secret),
+        });
+    }
+
+    /// <summary>Confirm the first code from the authenticator and switch 2FA on.</summary>
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    [HttpPost("2fa/confirm")]
+    public async Task<ActionResult<AuthResponse>> TwoFactorConfirm([FromBody] TwoFactorCodeRequest req, CancellationToken ct)
+    {
+        var user = await CurrentUser.GetAsync(User, _db, ct);
+        if (user is null) return Unauthorized();
+        if (string.IsNullOrEmpty(user.TwoFactorSecret))
+        {
+            return BadRequest("Start two-factor setup first.");
+        }
+        if (!Totp.Verify(user.TwoFactorSecret, req.Code))
+        {
+            return BadRequest("Incorrect code. Check your device's clock and try again.");
+        }
+
+        user.TwoFactorEnabled = true;
+        await _db.SaveChangesAsync(ct);
+        return Ok(BuildResponse(user));
+    }
+
+    /// <summary>Turn 2FA off — requires a current valid code.</summary>
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    [HttpPost("2fa/disable")]
+    public async Task<ActionResult<AuthResponse>> TwoFactorDisable([FromBody] TwoFactorCodeRequest req, CancellationToken ct)
+    {
+        var user = await CurrentUser.GetAsync(User, _db, ct);
+        if (user is null) return Unauthorized();
+        if (!user.TwoFactorEnabled) return Ok(BuildResponse(user));
+
+        if (!Totp.Verify(user.TwoFactorSecret, req.Code))
+        {
+            return BadRequest("Incorrect code.");
+        }
+
+        user.TwoFactorEnabled = false;
+        user.TwoFactorSecret = null;
+        await _db.SaveChangesAsync(ct);
+        return Ok(BuildResponse(user));
+    }
+
+    /// <summary>Exchange a 2FA challenge + TOTP code for a real session.</summary>
+    [HttpPost("2fa/login-verify")]
+    public async Task<ActionResult<AuthResponse>> TwoFactorLoginVerify([FromBody] TwoFactorLoginVerifyRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.ChallengeToken)) return BadRequest("Challenge token is required.");
+        if (string.IsNullOrWhiteSpace(req.Code)) return BadRequest("Code is required.");
+
+        var hash = SignupTokens.Hash(req.ChallengeToken!);
+        var challenge = await _db.TwoFactorChallenges.FirstOrDefaultAsync(c => c.TokenHash == hash, ct);
+        if (challenge is null || challenge.ConsumedAt is not null || challenge.ExpiresAt < DateTime.UtcNow)
+        {
+            return BadRequest("This verification step has expired. Please sign in again.");
+        }
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == challenge.UserId, ct);
+        if (user is null || string.IsNullOrEmpty(user.TwoFactorSecret)) return BadRequest("Account not found.");
+
+        // Leave the challenge live on a wrong code so the user can retry until it expires.
+        if (!Totp.Verify(user.TwoFactorSecret, req.Code))
+        {
+            return BadRequest("Incorrect code. Try again.");
+        }
+
+        challenge.ConsumedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(BuildResponse(user));
+    }
 
     // -----------------------------------------------------------------------
     // Passwordless sign-in (magic link)
@@ -392,6 +525,11 @@ public class AuthController : ControllerBase
 
         entity.ConsumedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+
+        if (RequiresTwoFactor(user))
+        {
+            return Ok(await ChallengeResponseAsync(user, ct));
+        }
 
         return Ok(BuildResponse(user));
     }

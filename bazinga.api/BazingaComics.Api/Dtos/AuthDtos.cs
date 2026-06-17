@@ -22,8 +22,30 @@ public class AuthResponse
     public string? Phone { get; set; }
     public string? SubscriptionType { get; set; }
     public string? SubscriptionExpiration { get; set; }
+    public bool TwoFactorEnabled { get; set; }
+    /// <summary>Set when first-factor succeeded but a TOTP code is still required.
+    /// In that case <see cref="Token"/> is empty and <see cref="ChallengeToken"/> is set.</summary>
+    public bool TwoFactorRequired { get; set; }
+    public string? ChallengeToken { get; set; }
     public string? CreatedAt { get; set; }
     public string? UpdatedAt { get; set; }
+}
+
+public class TwoFactorSetupResponse
+{
+    public string Secret { get; set; } = string.Empty;
+    public string OtpauthUri { get; set; } = string.Empty;
+}
+
+public class TwoFactorCodeRequest
+{
+    public string? Code { get; set; }
+}
+
+public class TwoFactorLoginVerifyRequest
+{
+    public string? ChallengeToken { get; set; }
+    public string? Code { get; set; }
 }
 
 public class SigninStartRequest

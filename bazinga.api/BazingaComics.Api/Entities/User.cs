@@ -18,6 +18,14 @@ public class User
     public string? Role { get; set; }
     public string? SubscriptionType { get; set; } = "Free";
     public DateOnly? SubscriptionExpiration { get; set; }
+
+    /// <summary>True once the user has confirmed a TOTP authenticator.</summary>
+    public bool TwoFactorEnabled { get; set; }
+
+    /// <summary>Base32 TOTP secret. Pending while setting up, active once enabled.</summary>
+    [JsonIgnore]
+    public string? TwoFactorSecret { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
