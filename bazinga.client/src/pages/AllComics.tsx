@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -8,6 +8,7 @@ import ComicCard from "@/components/ComicCard";
 import ComicModal from "@/components/ComicModal";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
+import { comicMetaCreators, fetchComicsMeta } from "@/lib/metadata";
 import {
   placeholderComics,
   type PlaceholderComic,
@@ -24,6 +25,7 @@ interface DisplayComic {
   image: string;
   description?: string;
   createdAt?: string;
+  metaId?: number;
 }
 
 const PAGE_SIZE = 18; // three rows × six cards on lg+
@@ -35,12 +37,49 @@ const AllComics = () => {
   const [selected, setSelected] = useState<DisplayComic | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
+  useEffect(() => {
+    setPage(1);
+  }, [masterQuery]);
+
   const { data: dbComics = [] } = useQuery<ComicDto[]>({
     queryKey: ["comics"],
     queryFn: () => apiFetch<ComicDto[]>("/api/comics"),
   });
 
+  // Real comic covers (Open Library), paginated server-side. Free-text search
+  // is passed straight through and restricted to the comics subject upstream.
+  const metaQuery = useQuery({
+    queryKey: ["comics-meta", "catalog", masterQuery || "", page],
+    queryFn: () =>
+      fetchComicsMeta({
+        page,
+        limit: PAGE_SIZE,
+        q: masterQuery || undefined,
+      }),
+    placeholderData: keepPreviousData,
+    staleTime: 30 * 60 * 1000,
+  });
+  const metaIssues = metaQuery.data?.data ?? [];
+  const metaConfigured = metaIssues.length > 0;
+  const metaTotal = metaQuery.data?.total ?? 0;
+
+  // Three sources, in order of preference: live comic metadata → DB comics →
+  // the placeholder catalogue. We collapse them into the same DisplayComic
+  // shape so the rest of the page is unchanged.
   const all = useMemo<DisplayComic[]>(() => {
+    if (metaIssues.length > 0) {
+      return metaIssues.map<DisplayComic>((m) => ({
+        id: m.id,
+        title: m.title,
+        series: m.series ?? "",
+        character: "",
+        creators: comicMetaCreators(m),
+        image: m.image ?? m.thumbnail ?? "",
+        description: m.description ?? undefined,
+        createdAt: m.year ? `${m.year}` : undefined,
+        metaId: m.id,
+      }));
+    }
     if (dbComics.length > 0) {
       return dbComics.map((c) => ({
         id: c.id,
@@ -63,9 +102,13 @@ const AllComics = () => {
       description: p.description,
       createdAt: p.releaseDate,
     }));
-  }, [dbComics]);
+  }, [dbComics, metaIssues]);
 
+  // When we're paging live metadata server-side, the local search filter is a
+  // no-op (the server already filtered). For DB / placeholder sources we apply
+  // the same in-memory filter we always did.
   const filtered = useMemo(() => {
+    if (metaConfigured) return all;
     if (!masterQuery) return all;
     const q = masterQuery.toLowerCase();
     return all.filter(
@@ -75,7 +118,7 @@ const AllComics = () => {
         c.series.toLowerCase().includes(q) ||
         c.character.toLowerCase().includes(q)
     );
-  }, [masterQuery, all]);
+  }, [masterQuery, all, metaConfigured]);
 
   // Deep-link: ?openComic=<id> pops the modal as if the card was clicked.
   const openComicId = searchParams.get("openComic");
@@ -89,9 +132,14 @@ const AllComics = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openComicId, all]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // Live metadata paginates server-side, so the slice is identity (already one
+  // page). For DB / placeholder modes we still slice locally.
+  const totalCount = metaConfigured ? metaTotal : filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
-  const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pageItems = metaConfigured
+    ? filtered
+    : filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,9 +161,13 @@ const AllComics = () => {
               All Comics
             </h1>
             <p className="mt-4 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
-              {masterQuery
-                ? `${filtered.length} comics matching "${masterQuery}".`
-                : `${all.length} issues across every series in the Bazinga catalogue.`}
+              {metaConfigured
+                ? masterQuery
+                  ? `${totalCount.toLocaleString()} issues matching "${masterQuery}", sourced live from Open Library.`
+                  : `${totalCount.toLocaleString()} superhero issues sourced live from Open Library.`
+                : masterQuery
+                  ? `${filtered.length} comics matching "${masterQuery}".`
+                  : `${all.length} issues across every series in the Bazinga catalogue.`}
             </p>
           </div>
         </section>
@@ -186,6 +238,9 @@ const AllComics = () => {
             image: selected.image,
             creators: selected.creators,
             description: selected.description,
+            series: selected.series,
+            year: selected.createdAt?.slice(0, 4),
+            metaId: selected.metaId,
           }}
         />
       )}

@@ -281,3 +281,63 @@ export const showMetaLine = (s: SuperheroShowDto): string => {
   if (s.rating) parts.push(`★ ${s.rating.toFixed(1)}`);
   return parts.join(" · ");
 };
+
+// ---------- Comics metadata (Open Library, no-auth) ----------------------
+
+export type ComicMetaDto = {
+  id: number;
+  title: string;
+  image?: string | null;
+  thumbnail?: string | null;
+  description?: string | null;
+  series?: string | null;
+  year?: number | null;
+  creators: string[];
+  genres: string[];
+};
+
+export type ComicsMetaPaged = {
+  data: ComicMetaDto[];
+  page: number;
+  limit: number;
+  total: number;
+  configured: boolean;
+};
+
+const comicsQs = (params: Record<string, string | number | undefined | null>) => {
+  const entries = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([k, v]) => [k, String(v)] as [string, string]);
+  if (entries.length === 0) return "";
+  return `?${new URLSearchParams(entries).toString()}`;
+};
+
+export type ComicsMetaOptions = {
+  page?: number;
+  limit?: number;
+  q?: string;
+};
+
+export const fetchComicsMeta = (opts: ComicsMetaOptions = {}) =>
+  apiFetch<ComicsMetaPaged>(
+    `/api/metadata/comics${comicsQs({
+      page: opts.page ?? 1,
+      limit: opts.limit ?? 24,
+      q: opts.q,
+    })}`
+  );
+
+export const fetchComicMeta = (id: number) =>
+  apiFetch<ComicMetaDto>(`/api/metadata/comics/${id}`);
+
+/** Render-ready creator string for a comic issue. */
+export const comicMetaCreators = (c: ComicMetaDto): string => {
+  if (c.creators.length === 0) return c.series ?? "Comics";
+  return c.creators.slice(0, 3).join(", ");
+};
+
+/** Short subtitle for cards. */
+export const comicMetaSubtitle = (c: ComicMetaDto): string => {
+  const creators = comicMetaCreators(c);
+  return c.year ? `${creators} · ${c.year}` : creators;
+};

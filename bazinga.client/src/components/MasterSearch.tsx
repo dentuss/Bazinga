@@ -4,11 +4,14 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Loader2, Search, Sparkles, X } from "lucide-react";
 import {
+  comicMetaSubtitle,
+  fetchComicsMeta,
   fetchSuperheroes,
   searchAnime,
   searchManga,
   superheroSubtitle,
   type AnimeDto,
+  type ComicMetaDto,
   type MangaDto,
   type SuperheroDto,
 } from "@/lib/metadata";
@@ -37,6 +40,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
   // Modals popped from the search itself — so clicking a result opens the
   // detail right here instead of bouncing to a catalog page.
   const [openComic, setOpenComic] = useState<PlaceholderComic | null>(null);
+  const [openMeta, setOpenMeta] = useState<ComicMetaDto | null>(null);
   const [openHero, setOpenHero] = useState<SuperheroDto | null>(null);
   const [openManga, setOpenManga] = useState<MangaDto | null>(null);
   const [openAnime, setOpenAnime] = useState<AnimeDto | null>(null);
@@ -47,6 +51,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
       setQuery("");
       setDebounced("");
       setOpenComic(null);
+      setOpenMeta(null);
       setOpenHero(null);
       setOpenManga(null);
       setOpenAnime(null);
@@ -56,6 +61,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
       if (e.key === "Escape") {
         // Layered close: dismiss top-most modal first, then the overlay.
         if (openComic) return setOpenComic(null);
+        if (openMeta) return setOpenMeta(null);
         if (openHero) return setOpenHero(null);
         if (openManga) return setOpenManga(null);
         if (openAnime) return setOpenAnime(null);
@@ -64,7 +70,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose, openComic, openHero, openManga, openAnime]);
+  }, [open, onClose, openComic, openMeta, openHero, openManga, openAnime]);
 
   // Debounce typing.
   useEffect(() => {
@@ -109,17 +115,29 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
     staleTime: 60 * 1000,
   });
 
-  const totalLoading = heroes.isFetching || manga.isFetching || anime.isFetching;
+  // Live superhero-comic search (Open Library, free, no-auth) — restricted to
+  // the "Comic books, strips" subject upstream so results stay on-genre.
+  const metaIssues = useQuery({
+    queryKey: ["master-search:comics-meta", debounced],
+    queryFn: () => fetchComicsMeta({ q: debounced, limit: 5 }),
+    enabled,
+    staleTime: 60 * 1000,
+  });
+
+  const totalLoading =
+    heroes.isFetching || manga.isFetching || anime.isFetching || metaIssues.isFetching;
   const heroHits = heroes.data?.data ?? [];
   const mangaHits = manga.data?.data ?? [];
   const animeHits = anime.data?.data ?? [];
+  const metaHits = metaIssues.data?.data ?? [];
   const empty =
     enabled &&
     !totalLoading &&
     comicMatches.length === 0 &&
     heroHits.length === 0 &&
     mangaHits.length === 0 &&
-    animeHits.length === 0;
+    animeHits.length === 0 &&
+    metaHits.length === 0;
 
   const goToFiltered = (target: "comics" | "characters" | "manga" | "anime") => {
     const q = encodeURIComponent(debounced);
@@ -250,6 +268,24 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
                 ))}
               </Section>
             )}
+            {metaHits.length > 0 && (
+              <Section
+                title="Superhero Comics"
+                count={metaHits.length}
+                onSeeAll={() => goToFiltered("comics")}
+              >
+                {metaHits.map((m: ComicMetaDto) => (
+                  <Result
+                    key={`meta:${m.id}`}
+                    image={m.thumbnail ?? m.image ?? ""}
+                    title={m.title}
+                    subtitle={comicMetaSubtitle(m)}
+                    badge={m.year ? String(m.year) : undefined}
+                    onClick={() => setOpenMeta(m)}
+                  />
+                ))}
+              </Section>
+            )}
             {animeHits.length > 0 && (
               <Section
                 title="Anime"
@@ -325,6 +361,22 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
             creators: openComic.creators,
             description: openComic.description,
             series: openComic.series,
+          }}
+        />
+      )}
+      {openMeta && (
+        <ComicModal
+          isOpen={true}
+          onClose={() => setOpenMeta(null)}
+          comic={{
+            id: openMeta.id,
+            title: openMeta.title,
+            image: openMeta.image ?? openMeta.thumbnail ?? "",
+            creators: openMeta.creators.join(", "),
+            description: openMeta.description ?? undefined,
+            series: openMeta.series ?? undefined,
+            year: openMeta.year ? String(openMeta.year) : undefined,
+            metaId: openMeta.id,
           }}
         />
       )}

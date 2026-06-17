@@ -134,6 +134,15 @@ builder.Services.AddHttpClient<ISuperheroService, SuperheroService>(client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("BazingaComics/1.0 (+https://bazinga.local)");
 });
 
+// Comics metadata — Open Library (free, no auth). Real covers + descriptions
+// for Marvel/DC/indie comics; replaces the discontinued Marvel API.
+builder.Services.AddHttpClient<IComicMetadataService, OpenLibraryComicService>(client =>
+{
+    client.BaseAddress = new Uri("https://openlibrary.org/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("BazingaComics/1.0 (+https://bazinga.local)");
+});
+
 // Controllers + JSON
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
