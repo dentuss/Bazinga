@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<SignupToken> SignupTokens => Set<SignupToken>();
     public DbSet<SigninToken> SigninTokens => Set<SigninToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<TwoFactorChallenge> TwoFactorChallenges => Set<TwoFactorChallenge>();
     public DbSet<Comic> Comics => Set<Comic>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<ComicCondition> Conditions => Set<ComicCondition>();
@@ -44,6 +45,8 @@ public class AppDbContext : DbContext
             e.Property(x => x.Role).HasColumnName("role").HasMaxLength(50);
             e.Property(x => x.SubscriptionType).HasColumnName("subscription_type").HasMaxLength(20);
             e.Property(x => x.SubscriptionExpiration).HasColumnName("subscription_expiration");
+            e.Property(x => x.TwoFactorEnabled).HasColumnName("two_factor_enabled").HasDefaultValue(false);
+            e.Property(x => x.TwoFactorSecret).HasColumnName("two_factor_secret").HasMaxLength(64);
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.HasIndex(x => x.Username).IsUnique();
@@ -88,6 +91,19 @@ public class AppDbContext : DbContext
             e.Property(x => x.ConsumedAt).HasColumnName("consumed_at");
             e.HasIndex(x => x.TokenHash).IsUnique();
             e.HasIndex(x => x.Email);
+        });
+
+        b.Entity<TwoFactorChallenge>(e =>
+        {
+            e.ToTable("two_factor_challenges");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.UserId).HasColumnName("user_id").IsRequired();
+            e.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(128).IsRequired();
+            e.Property(x => x.ExpiresAt).HasColumnName("expires_at").IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.ConsumedAt).HasColumnName("consumed_at");
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasIndex(x => x.UserId);
         });
 
         b.Entity<Entities.Profile>(e =>

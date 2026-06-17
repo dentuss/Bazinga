@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import ProfileAvatar from "@/components/ProfileAvatar";
+import TwoFactorSetup from "@/components/TwoFactorSetup";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -293,6 +294,8 @@ const Profile = () => {
                     }
                   />
                 </div>
+
+                <TwoFactorSetup />
 
                 <div className="rounded-xl border border-border bg-card p-6">
                   <h2 className="font-bold mb-2">Profile PINs</h2>

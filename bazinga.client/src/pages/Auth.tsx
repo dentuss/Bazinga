@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronDown, KeyRound, Loader2, Lock, Mail, ShieldCheck, X }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import CodeInput from "@/components/CodeInput";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { signinStart } from "@/lib/auth";
@@ -20,7 +21,11 @@ const Auth = () => {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const { login } = useAuth();
+  // 2FA step (after a correct password for a 2FA-enabled account)
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const { login, verifyTwoFactor } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -48,12 +53,35 @@ const Auth = () => {
     }
   };
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    login(email.trim(), password)
-      .then(() => navigate("/profiles"))
-      .catch(() => setError("Authentication failed. Please check your details."));
+    try {
+      const outcome = await login(email.trim(), password);
+      if (outcome.twoFactorRequired && outcome.challengeToken) {
+        setChallenge(outcome.challengeToken);
+        setCode("");
+        return;
+      }
+      navigate("/profiles");
+    } catch {
+      setError("Authentication failed. Please check your details.");
+    }
+  };
+
+  const handleVerifyCode = async (value: string) => {
+    if (!challenge || value.length !== 6) return;
+    setVerifying(true);
+    setError("");
+    try {
+      await verifyTwoFactor(challenge, value);
+      navigate("/profiles");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Incorrect code.");
+      setCode("");
+    } finally {
+      setVerifying(false);
+    }
   };
 
   return (
@@ -81,7 +109,47 @@ const Auth = () => {
               </p>
             </div>
 
-            {sent ? (
+            {challenge ? (
+              <div className="space-y-5">
+                <div className="text-center space-y-1">
+                  <div className="mx-auto h-12 w-12 rounded-full bg-primary/15 grid place-items-center">
+                    <ShieldCheck className="h-6 w-6 text-primary" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Enter the 6-digit code from your authenticator app.
+                  </p>
+                </div>
+                <CodeInput
+                  value={code}
+                  onChange={setCode}
+                  onComplete={handleVerifyCode}
+                  autoFocus
+                  disabled={verifying}
+                  error={Boolean(error)}
+                />
+                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={() => handleVerifyCode(code)}
+                  disabled={verifying || code.length !== 6}
+                >
+                  {verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Verify code
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChallenge(null);
+                    setCode("");
+                    setError("");
+                  }}
+                  className="w-full text-center text-xs font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  Back to sign in
+                </button>
+              </div>
+            ) : sent ? (
               <CheckYourEmail email={sent} onBack={() => setSent(null)} />
             ) : mode === "magic" ? (
               <form onSubmit={handleMagicLink} className="space-y-6">
@@ -127,8 +195,8 @@ const Auth = () => {
               </form>
             )}
 
-            {/* Get help dropdown — only shown when we're not in the "check email" state. */}
-            {!sent && (
+            {/* Get help dropdown — hidden during the "check email" and 2FA steps. */}
+            {!sent && !challenge && (
               <div className="mt-6">
                 <button
                   type="button"
@@ -155,8 +223,13 @@ const Auth = () => {
                     <HelpOption
                       icon={<ShieldCheck className="h-4 w-4" />}
                       label="Sign in using 2FA"
-                      onClick={() => toast({ title: "Coming soon", description: "Two-factor sign-in isn't enabled on this account yet." })}
-                      hint="Coming soon"
+                      onClick={() =>
+                        toast({
+                          title: "Two-factor is automatic",
+                          description:
+                            "If 2FA is on for your account, we'll ask for your authenticator code right after you sign in.",
+                        })
+                      }
                     />
                     <HelpOption
                       icon={<KeyRound className="h-4 w-4" />}

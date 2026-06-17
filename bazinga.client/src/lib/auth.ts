@@ -25,6 +25,9 @@ export type SigninVerifyResponse = {
   phone?: string;
   subscriptionType?: string;
   subscriptionExpiration?: string;
+  twoFactorEnabled?: boolean;
+  twoFactorRequired?: boolean;
+  challengeToken?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -59,4 +62,41 @@ export const updateAccount = (token: string, body: UpdateAccountInput) =>
     method: "PUT",
     authToken: token,
     body: JSON.stringify(body),
+  });
+
+// ---------- Two-factor authentication (TOTP) -------------------------------
+
+export type TwoFactorSetupResponse = {
+  secret: string;
+  otpauthUri: string;
+};
+
+/** Begin enrollment — returns the secret + otpauth URI for the QR code. */
+export const twoFactorSetup = (token: string) =>
+  apiFetch<TwoFactorSetupResponse>("/api/auth/2fa/setup", {
+    method: "POST",
+    authToken: token,
+  });
+
+/** Confirm the first authenticator code and switch 2FA on. */
+export const twoFactorConfirm = (token: string, code: string) =>
+  apiFetch<SigninVerifyResponse>("/api/auth/2fa/confirm", {
+    method: "POST",
+    authToken: token,
+    body: JSON.stringify({ code }),
+  });
+
+/** Turn 2FA off (requires a current valid code). */
+export const twoFactorDisable = (token: string, code: string) =>
+  apiFetch<SigninVerifyResponse>("/api/auth/2fa/disable", {
+    method: "POST",
+    authToken: token,
+    body: JSON.stringify({ code }),
+  });
+
+/** Exchange a login challenge + TOTP code for a real session. */
+export const twoFactorLoginVerify = (challengeToken: string, code: string) =>
+  apiFetch<SigninVerifyResponse>("/api/auth/2fa/login-verify", {
+    method: "POST",
+    body: JSON.stringify({ challengeToken, code }),
   });

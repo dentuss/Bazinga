@@ -10,7 +10,11 @@ import {
 } from "@/lib/profiles";
 import type { SignupPlan } from "@/lib/signup";
 import { isPaidSubscription, isTrialExpired } from "@/data/subscriptionPlans";
-import { updateAccount as apiUpdateAccount, type UpdateAccountInput } from "@/lib/auth";
+import {
+  updateAccount as apiUpdateAccount,
+  twoFactorLoginVerify as apiTwoFactorLoginVerify,
+  type UpdateAccountInput,
+} from "@/lib/auth";
 
 type AuthUser = {
   id: number;
@@ -24,9 +28,13 @@ type AuthUser = {
   phone?: string;
   subscriptionType?: string;
   subscriptionExpiration?: string;
+  twoFactorEnabled?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
+
+/** Result of a first-factor sign-in: either we're in, or a TOTP code is needed. */
+export type LoginOutcome = { twoFactorRequired: boolean; challengeToken?: string };
 
 type AuthApiResponse = {
   token: string;
@@ -41,6 +49,9 @@ type AuthApiResponse = {
   phone?: string;
   subscriptionType?: string;
   subscriptionExpiration?: string;
+  twoFactorEnabled?: boolean;
+  twoFactorRequired?: boolean;
+  challengeToken?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -53,7 +64,8 @@ type AuthContextType = {
   profilesLoading: boolean;
   hasPaidSubscription: boolean;
   trialExpired: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginOutcome>;
+  verifyTwoFactor: (challengeToken: string, code: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   completeSignup: (
     token: string,
@@ -63,7 +75,7 @@ type AuthContextType = {
   ) => Promise<void>;
   updateUser: (updates: Partial<AuthUser>) => void;
   updateAccount: (input: UpdateAccountInput) => Promise<void>;
-  consumeSigninToken: (verifyToken: () => Promise<AuthApiResponse>) => Promise<void>;
+  consumeSigninToken: (verifyToken: () => Promise<AuthApiResponse>) => Promise<LoginOutcome>;
   logout: () => void;
   refreshProfiles: () => Promise<void>;
   selectProfile: (id: number) => void;
@@ -151,6 +163,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       phone: payload.phone,
       subscriptionType: payload.subscriptionType,
       subscriptionExpiration: payload.subscriptionExpiration,
+      twoFactorEnabled: payload.twoFactorEnabled,
       createdAt: payload.createdAt ?? now,
       updatedAt: payload.updatedAt ?? now,
     });
@@ -158,10 +171,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setCurrentProfileId(null);
   };
 
-  /** Used by /signin/verify after the magic link is exchanged for a JWT. */
+  /**
+   * Apply a first-factor response: if 2FA is required we surface the challenge
+   * to the caller instead of completing the session.
+   */
+  const applyFirstFactor = (response: AuthApiResponse): LoginOutcome => {
+    if (response.twoFactorRequired && response.challengeToken) {
+      return { twoFactorRequired: true, challengeToken: response.challengeToken };
+    }
+    handleAuth(response.token, response);
+    return { twoFactorRequired: false };
+  };
+
+  /** Used by /signin/verify after the magic link is exchanged for a JWT (or a challenge). */
   const consumeSigninToken = async (verifyToken: () => Promise<AuthApiResponse>) => {
     const response = await verifyToken();
-    handleAuth(response.token, response);
+    return applyFirstFactor(response);
+  };
+
+  const verifyTwoFactor = async (challengeToken: string, code: string) => {
+    const response = await apiTwoFactorLoginVerify(challengeToken, code);
+    handleAuth(response.token, response as AuthApiResponse);
   };
 
   const updateAccount = async (input: UpdateAccountInput) => {
@@ -175,7 +205,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
-    handleAuth(response.token, response);
+    return applyFirstFactor(response);
   };
 
   const register = async (username: string, email: string, password: string) => {
@@ -241,6 +271,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         hasPaidSubscription: isPaidSubscription(user?.subscriptionType),
         trialExpired: isTrialExpired(user?.subscriptionType, user?.subscriptionExpiration),
         login,
+        verifyTwoFactor,
         register,
         completeSignup,
         updateUser: (updates) => setUser((prev) => (prev ? { ...prev, ...updates } : prev)),

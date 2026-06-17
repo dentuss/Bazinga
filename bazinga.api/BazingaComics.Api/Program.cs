@@ -254,10 +254,25 @@ using (var scope = app.Services.CreateScope())
             INDEX ix_pwreset_email (email)
         );");
 
-    // Add `users.phone` and `profiles.pin_hash` if they're missing on an older
-    // database. MySQL lacks `ADD COLUMN IF NOT EXISTS`, so we look at
-    // information_schema and prepare a no-op when the column already exists.
+    // TOTP 2FA challenge handles (one-shot, post-first-factor).
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS two_factor_challenges (
+            id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            token_hash VARCHAR(128) NOT NULL,
+            expires_at DATETIME(6) NOT NULL,
+            created_at DATETIME(6) NOT NULL,
+            consumed_at DATETIME(6) NULL,
+            UNIQUE INDEX ix_2fa_challenge_token_hash (token_hash),
+            INDEX ix_2fa_challenge_user (user_id)
+        );");
+
+    // Add columns that arrived after the original schema if they're missing on
+    // an older database. MySQL lacks `ADD COLUMN IF NOT EXISTS`, so AddColumnIfMissing
+    // just attempts the ALTER and treats the duplicate-column error as a no-op.
     AddColumnIfMissing(db, "users", "phone", "VARCHAR(50) NULL");
+    AddColumnIfMissing(db, "users", "two_factor_enabled", "TINYINT(1) NOT NULL DEFAULT 0");
+    AddColumnIfMissing(db, "users", "two_factor_secret", "VARCHAR(64) NULL");
     AddColumnIfMissing(db, "profiles", "pin_hash", "VARCHAR(255) NULL");
 }
 
