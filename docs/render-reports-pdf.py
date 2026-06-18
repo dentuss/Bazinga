@@ -141,6 +141,32 @@ code {
   padding: 0 0.15em;
   border-radius: 2px;
 }
+/* Multi-line code listings (Appendix). Wrap long lines so nothing is
+   clipped at the right margin; allow a listing to flow across pages. */
+pre {
+  font-family: "Liberation Mono", "DejaVu Sans Mono", monospace;
+  font-size: 8pt;
+  line-height: 1.28;
+  background: #f7f7f7;
+  border: 1px solid #d6d6d6;
+  border-radius: 3px;
+  padding: 5px 8px;
+  margin: 0.2em 0 0.8em 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+  hyphens: none;
+  page-break-inside: auto;
+}
+pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: #111;
+}
+/* Listing captions: paragraphs that start with "Лістинг" / "Рисунок". */
+p.caption { text-indent: 0; text-align: center; font-style: italic; margin: 0.2em 0 0.3em 0; font-size: 11pt; }
 a { color: #1a4a8a; text-decoration: none; word-break: break-all; }
 h1, h2, h3 {
   font-weight: 700;
@@ -161,16 +187,19 @@ h3 {
   text-align: left;
 }
 h2 + p, h3 + p { text-indent: 0; }
-table { border-collapse: collapse; margin: 0.6em auto; }
+table { border-collapse: collapse; margin: 0.6em auto; width: 100%; }
+/* Generic bordered tables (comparative-analysis matrices in chapter 1). */
+table th, table td {
+  border: 1px solid #333;
+  padding: 4px 7px;
+  text-align: left;
+  vertical-align: top;
+  font-size: 10.5pt;
+}
+table th { font-weight: 700; text-align: center; }
 table.team-table, table.supervisor-table {
   width: 75%;
   font-size: 11pt;
-}
-table.team-table th, table.team-table td,
-table.supervisor-table td {
-  border: 1px solid #111;
-  padding: 4px 8px;
-  text-align: left;
 }
 table.team-table th { font-weight: 700; }
 
@@ -200,7 +229,16 @@ p, li { orphans: 3; widows: 3; }
 # indent inside list items so the bullet hangs cleanly.
 def md_to_html(body: str) -> str:
     extensions = ["extra", "sane_lists"]
-    return md.markdown(body, extensions=extensions, output_format="html5")
+    html = md.markdown(body, extensions=extensions, output_format="html5")
+    # Tag listing / figure / table captions so CSS can centre + italicise them.
+    # Captions may contain inline <code> (file paths), so allow inner tags but
+    # keep the match on a single paragraph (non-greedy, no DOTALL).
+    html = re.sub(
+        r"<p>((?:Лістинг|Рисунок|Таблиця)\s.*?)</p>",
+        r'<p class="caption">\1</p>',
+        html,
+    )
+    return html
 
 
 def build_html(source_md: Path) -> str:
