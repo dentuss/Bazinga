@@ -1,0 +1,561 @@
+#!/usr/bin/env python3
+"""
+Render bachelor's-report Markdown files to Google-Docs-friendly DOCX.
+
+Design constraints from the latest user feedback:
+- single serif typeface throughout the body (Liberation Serif), 14 pt;
+- highlighted runs (bold/italic) and monospaced code keep their styling;
+- code snippets render as plain monospaced paragraphs with no border /
+  shading / picture-like frame, divided by "Приклад N — …" captions
+  (the captions are already part of the markdown);
+- comparison tables are bordered and centered;
+- title page mirrors the reference report layout.
+
+The script parses the same markdown the PDF renderer uses, then walks the
+parsed structure to emit Word XML via python-docx. Markdown features used
+here are intentionally narrow (headings, paragraphs, bold/italic/inline
+code, bullet/numbered lists, GFM tables, fenced code blocks); anything
+more exotic is rendered as plain text.
+"""
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+from typing import Iterable
+
+from docx import Document
+from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Cm, Pt, RGBColor
+
+ROOT = Path(__file__).resolve().parent
+
+SERIF = "Liberation Serif"      # one serif typeface for the entire body
+MONO = "Liberation Mono"        # code only — still kept inside this single deck
+BODY_PT = 14
+CAPTION_PT = 13
+CODE_PT = 11
+H1_PT = 16
+H2_PT = 15
+H3_PT = 14
+
+
+# ---------------------------------------------------------------------------
+# Small helpers for tweaking python-docx XML where the public API stops short
+# ---------------------------------------------------------------------------
+
+def _set_cell_border(cell, color="000000", sz="6"):
+    tc_pr = cell._tc.get_or_add_tcPr()
+    tc_borders = OxmlElement("w:tcBorders")
+    for edge in ("top", "left", "bottom", "right"):
+        b = OxmlElement(f"w:{edge}")
+        b.set(qn("w:val"), "single")
+        b.set(qn("w:sz"), sz)
+        b.set(qn("w:color"), color)
+        tc_borders.append(b)
+    tc_pr.append(tc_borders)
+
+
+def _set_run_font(run, *, name=SERIF, size_pt=BODY_PT, bold=None, italic=None, color=None):
+    run.font.name = name
+    run.font.size = Pt(size_pt)
+    # East-Asian font hint keeps Cyrillic mapped to the same family in MS Word
+    rpr = run._element.get_or_add_rPr()
+    rfonts = rpr.find(qn("w:rFonts"))
+    if rfonts is None:
+        rfonts = OxmlElement("w:rFonts")
+        rpr.append(rfonts)
+    for attr in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
+        rfonts.set(qn(attr), name)
+    if bold is not None:
+        run.bold = bold
+    if italic is not None:
+        run.italic = italic
+    if color is not None:
+        run.font.color.rgb = RGBColor.from_string(color)
+
+
+def _new_paragraph(doc, *, align=None, indent_first=False, space_after=2,
+                   line_rule_auto=True, line_spacing=1.15, keep_with_next=False):
+    p = doc.add_paragraph()
+    pf = p.paragraph_format
+    pf.space_before = Pt(0)
+    pf.space_after = Pt(space_after)
+    if line_rule_auto:
+        pf.line_spacing = line_spacing
+        pf.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+    if indent_first:
+        pf.first_line_indent = Cm(1.25)
+    if align is not None:
+        p.alignment = align
+    if keep_with_next:
+        p.paragraph_format.keep_with_next = True
+    return p
+
+
+# ---------------------------------------------------------------------------
+# Inline markdown → runs (bold / italic / `code`) on a target paragraph
+# ---------------------------------------------------------------------------
+
+# A simple, robust inline parser. Markdown bold uses **…** (we also accept __…__);
+# italic uses *…* or _…_; inline code uses `…`. Sequences are non-overlapping
+# and parsed greedily left-to-right.
+_INLINE = re.compile(
+    r"(\*\*[^*\n]+?\*\*|__[^_\n]+?__|\*[^*\n]+?\*|_[^_\n]+?_|`[^`\n]+?`)"
+)
+
+
+def _add_inline(paragraph, text: str, *, base_size=BODY_PT):
+    """Walk the inline markdown of `text`, append styled runs to `paragraph`."""
+    pos = 0
+    for m in _INLINE.finditer(text):
+        if m.start() > pos:
+            _add_run(paragraph, text[pos:m.start()], size_pt=base_size)
+        token = m.group(0)
+        if token.startswith("**") or token.startswith("__"):
+            _add_run(paragraph, token[2:-2], bold=True, size_pt=base_size)
+        elif token.startswith("`"):
+            _add_run(paragraph, token[1:-1], mono=True, size_pt=base_size)
+        else:
+            _add_run(paragraph, token[1:-1], italic=True, size_pt=base_size)
+        pos = m.end()
+    if pos < len(text):
+        _add_run(paragraph, text[pos:], size_pt=base_size)
+
+
+def _add_run(paragraph, text: str, *, bold=False, italic=False, mono=False,
+             size_pt=BODY_PT):
+    if not text:
+        return
+    run = paragraph.add_run(text)
+    _set_run_font(
+        run,
+        name=MONO if mono else SERIF,
+        size_pt=size_pt,
+        bold=bold or None,
+        italic=italic or None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Markdown parsing: we tokenise into a small set of block types
+# ---------------------------------------------------------------------------
+
+TABLE_SEP = re.compile(r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$")
+
+
+def parse_blocks(md: str):
+    """Yield (type, payload) tuples for top-level blocks in `md`."""
+    lines = md.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Front-matter / horizontal rule
+        if line.strip() == "---":
+            yield ("hr", None)
+            i += 1
+            continue
+
+        # Headings — H1 / H2 / H3
+        if line.startswith("# "):
+            yield ("h1", line[2:].strip())
+            i += 1
+            continue
+        if line.startswith("## "):
+            yield ("h2", line[3:].strip())
+            i += 1
+            continue
+        if line.startswith("### "):
+            yield ("h3", line[4:].strip())
+            i += 1
+            continue
+
+        # Fenced code block ```lang … ```
+        if line.startswith("```"):
+            j = i + 1
+            buf = []
+            while j < len(lines) and not lines[j].startswith("```"):
+                buf.append(lines[j])
+                j += 1
+            yield ("code", "\n".join(buf))
+            i = j + 1
+            continue
+
+        # Tables — header row | --- | --- |
+        if "|" in line and i + 1 < len(lines) and TABLE_SEP.match(lines[i + 1]):
+            header = [c.strip() for c in line.strip().strip("|").split("|")]
+            j = i + 2
+            rows = []
+            while j < len(lines) and "|" in lines[j] and lines[j].strip():
+                rows.append([c.strip() for c in lines[j].strip().strip("|").split("|")])
+                j += 1
+            yield ("table", (header, rows))
+            i = j
+            continue
+
+        # Bullet list
+        if re.match(r"^\s*[-*]\s+", line):
+            j = i
+            items = []
+            while j < len(lines) and re.match(r"^\s*[-*]\s+", lines[j]):
+                items.append(re.sub(r"^\s*[-*]\s+", "", lines[j]))
+                j += 1
+            yield ("ul", items)
+            i = j
+            continue
+
+        # Numbered list
+        if re.match(r"^\s*\d+[.)]\s+", line):
+            j = i
+            items = []
+            while j < len(lines) and re.match(r"^\s*\d+[.)]\s+", lines[j]):
+                items.append(re.sub(r"^\s*\d+[.)]\s+", "", lines[j]))
+                j += 1
+            yield ("ol", items)
+            i = j
+            continue
+
+        # Paragraph: collect consecutive non-blank lines that are not block starters
+        if line.strip():
+            j = i
+            chunk = []
+            while j < len(lines) and lines[j].strip() \
+                    and not lines[j].startswith(("# ", "## ", "### ", "```")) \
+                    and not re.match(r"^\s*[-*]\s+", lines[j]) \
+                    and not re.match(r"^\s*\d+[.)]\s+", lines[j]) \
+                    and not ("|" in lines[j] and j + 1 < len(lines) and TABLE_SEP.match(lines[j + 1])) \
+                    and lines[j].strip() != "---":
+                chunk.append(lines[j])
+                j += 1
+            yield ("p", " ".join(chunk).strip())
+            i = j
+            continue
+
+        # Blank line: skip
+        i += 1
+
+
+# ---------------------------------------------------------------------------
+# Front matter (everything before the first H2) → custom title page
+# ---------------------------------------------------------------------------
+
+def render_title_page(doc, blocks, raw_md=""):
+    """Find the title-page fields in the front matter and lay them out the
+    way the reference report does. We look at the raw markdown (line by line)
+    for the fixed-format header lines and only fall back to the parsed blocks
+    for the team table."""
+    fm = {}
+    project_title = None
+    team_rows = []
+    author = supervisor = city_year = None
+
+    # Raw line-by-line scan up to the first "---" or "## АНОТАЦІЯ" — that is
+    # the title-page region of the markdown.
+    for raw in raw_md.splitlines():
+        s = raw.strip()
+        if s == "---" or s.startswith("## АНОТАЦІЯ"):
+            break
+        plain = s.replace("**", "").strip()
+        if plain == "Приватний заклад вищої освіти":
+            fm["inst_top"] = plain
+        elif plain == "Одеський технологічний університет «ШАГ»":
+            fm["inst_main"] = plain
+        elif plain.startswith("Кафедра"):
+            fm["department"] = plain
+        elif plain.startswith("на здобуття"):
+            fm["degree"] = plain
+        elif plain.startswith("зі спеціальності"):
+            fm["specialty"] = plain
+        elif s.startswith("## "):
+            project_title = s[3:].strip()
+        elif s.startswith("**Автор звіту:**"):
+            author = s.split("**Автор звіту:**", 1)[1].strip()
+        elif s.startswith("**Керівник:**"):
+            supervisor = s.split("**Керівник:**", 1)[1].strip()
+        elif re.match(r"^Одеса\s*[–-]\s*\d{4}$", s):
+            city_year = s
+
+    for kind, payload in blocks:
+        if kind == "h2":
+            break
+        if kind == "table":
+            header, rows = payload
+            if header[:2] == ["№", "П.І.Б."]:
+                team_rows = rows
+
+    # Header (centered)
+    for line in (fm.get("inst_top"), fm.get("inst_main"), fm.get("department")):
+        if not line:
+            continue
+        p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2)
+        _add_run(p, line, bold=(line == fm.get("inst_main")), size_pt=BODY_PT)
+
+    # Spacer
+    for _ in range(4):
+        _new_paragraph(doc, space_after=2)
+
+    p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2)
+    _add_run(p, "випускна кваліфікаційна робота бакалавра", size_pt=BODY_PT)
+
+    p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2)
+    _add_run(p, project_title or "", bold=True, size_pt=BODY_PT)
+
+    for line in (fm.get("degree"), fm.get("specialty")):
+        if not line:
+            continue
+        p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2)
+        _add_run(p, line, size_pt=BODY_PT)
+
+    # Spacer
+    for _ in range(3):
+        _new_paragraph(doc, space_after=2)
+
+    # "Виконавці проєкту:" + team table
+    p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4)
+    _add_run(p, "Виконавці проєкту:", size_pt=BODY_PT)
+
+    if team_rows:
+        table = doc.add_table(rows=1 + len(team_rows), cols=4)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        widths = (Cm(1.2), Cm(8.5), Cm(4.0), Cm(2.5))
+        hdr = table.rows[0].cells
+        for col, label in enumerate(("№", "П.І.Б.", "Ролі", "Група")):
+            hdr[col].text = ""
+            cp = hdr[col].paragraphs[0]
+            cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            _add_run(cp, label, bold=True, size_pt=BODY_PT)
+            _set_cell_border(hdr[col])
+            hdr[col].width = widths[col]
+        for r, row in enumerate(team_rows, start=1):
+            cells = table.rows[r].cells
+            for c, val in enumerate(row[:4]):
+                cells[c].text = ""
+                cp = cells[c].paragraphs[0]
+                cp.alignment = (WD_ALIGN_PARAGRAPH.CENTER if c in (0, 3) else WD_ALIGN_PARAGRAPH.LEFT)
+                _add_run(cp, val, size_pt=BODY_PT)
+                _set_cell_border(cells[c])
+                cells[c].width = widths[c]
+
+    # Author
+    if author:
+        _new_paragraph(doc, space_after=2)
+        p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=8)
+        _add_run(p, f"Автор звіту: {author}", bold=True, size_pt=BODY_PT)
+
+    # Supervisor mini-table
+    if supervisor:
+        table = doc.add_table(rows=1, cols=2)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        widths = (Cm(4.5), Cm(11.0))
+        for col, (label, val) in enumerate((("Керівник", supervisor),)):
+            pass
+        c1, c2 = table.rows[0].cells
+        c1.text = ""
+        cp = c1.paragraphs[0]
+        cp.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        _add_run(cp, "Керівник", size_pt=BODY_PT)
+        _set_cell_border(c1)
+        c1.width = widths[0]
+        c2.text = ""
+        cp = c2.paragraphs[0]
+        cp.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        _add_run(cp, supervisor, size_pt=BODY_PT)
+        _set_cell_border(c2)
+        c2.width = widths[1]
+
+    # Spacer + city/year
+    for _ in range(3):
+        _new_paragraph(doc, space_after=2)
+    if city_year:
+        p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2)
+        _add_run(p, city_year, size_pt=BODY_PT)
+
+    # Page break before the body
+    p = doc.add_paragraph()
+    run = p.add_run()
+    run.add_break()
+    _set_run_font(run, size_pt=BODY_PT)
+    last_run = run._element
+    pgbr = OxmlElement("w:br")
+    pgbr.set(qn("w:type"), "page")
+    last_run.append(pgbr)
+
+
+# ---------------------------------------------------------------------------
+# Body rendering
+# ---------------------------------------------------------------------------
+
+def render_body(doc, blocks):
+    h2_seen = False
+    for kind, payload in blocks:
+        # Skip everything until we cross the first H2 (АНОТАЦІЯ) — that part is
+        # already handled by render_title_page.
+        if not h2_seen:
+            if kind == "h2":
+                h2_seen = True
+            else:
+                continue
+
+        if kind == "hr":
+            continue  # rendered as paragraph breaks elsewhere; skip the bar
+        if kind == "h1":
+            p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=6,
+                               keep_with_next=True)
+            p.paragraph_format.page_break_before = True
+            _add_run(p, payload.upper(), bold=True, size_pt=H1_PT)
+        elif kind == "h2":
+            p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=8,
+                               keep_with_next=True)
+            p.paragraph_format.page_break_before = True
+            _add_run(p, payload.upper(), bold=True, size_pt=H2_PT)
+        elif kind == "h3":
+            p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.LEFT, space_after=4,
+                               keep_with_next=True)
+            _add_run(p, payload, bold=True, size_pt=H3_PT)
+        elif kind == "p":
+            render_paragraph(doc, payload)
+        elif kind == "ul":
+            for item in payload:
+                p = doc.add_paragraph(style="List Bullet")
+                p.paragraph_format.space_after = Pt(2)
+                p.paragraph_format.line_spacing = 1.15
+                _add_inline(p, item)
+        elif kind == "ol":
+            for item in payload:
+                p = doc.add_paragraph(style="List Number")
+                p.paragraph_format.space_after = Pt(2)
+                p.paragraph_format.line_spacing = 1.15
+                _add_inline(p, item)
+        elif kind == "table":
+            render_table(doc, *payload)
+        elif kind == "code":
+            render_code_block(doc, payload)
+
+
+def render_paragraph(doc, text: str):
+    """Body paragraphs. Recognise our caption convention so 'Приклад N — …'
+    and 'Таблиця X — …' come out centred + italic + kept-with-next."""
+    is_caption = bool(re.match(r"^(Приклад|Таблиця|Рисунок|Лістинг)\s\S", text))
+    if is_caption:
+        p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2,
+                           keep_with_next=True)
+        # Inline parsing so backticked file paths render in mono
+        _add_inline_italic(p, text, size_pt=CAPTION_PT)
+        return
+    p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.JUSTIFY,
+                       indent_first=True, space_after=4)
+    _add_inline(p, text)
+
+
+def _add_inline_italic(paragraph, text: str, *, size_pt=CAPTION_PT):
+    """Same as _add_inline but italicises plain text runs (captions)."""
+    pos = 0
+    for m in _INLINE.finditer(text):
+        if m.start() > pos:
+            _add_run(paragraph, text[pos:m.start()], italic=True, size_pt=size_pt)
+        token = m.group(0)
+        if token.startswith("**") or token.startswith("__"):
+            _add_run(paragraph, token[2:-2], bold=True, italic=True, size_pt=size_pt)
+        elif token.startswith("`"):
+            _add_run(paragraph, token[1:-1], mono=True, italic=True, size_pt=size_pt)
+        else:
+            _add_run(paragraph, token[1:-1], italic=True, size_pt=size_pt)
+        pos = m.end()
+    if pos < len(text):
+        _add_run(paragraph, text[pos:], italic=True, size_pt=size_pt)
+
+
+def render_table(doc, header, rows):
+    cols = len(header)
+    table = doc.add_table(rows=1 + len(rows), cols=cols)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    # Header
+    for c, label in enumerate(header):
+        cell = table.rows[0].cells[c]
+        cell.text = ""
+        cp = cell.paragraphs[0]
+        cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _add_run(cp, label, bold=True, size_pt=BODY_PT)
+        _set_cell_border(cell)
+    for r, row in enumerate(rows, start=1):
+        for c, val in enumerate(row[:cols]):
+            cell = table.rows[r].cells[c]
+            cell.text = ""
+            cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            cp = cell.paragraphs[0]
+            # First column tends to be a label; centre the +/− cells.
+            cp.alignment = (WD_ALIGN_PARAGRAPH.LEFT if c == 0 else WD_ALIGN_PARAGRAPH.CENTER)
+            _add_inline(cp, val, base_size=BODY_PT - 1)
+            _set_cell_border(cell)
+    # Tiny gap after the table.
+    _new_paragraph(doc, space_after=4)
+
+
+def render_code_block(doc, code: str):
+    """Render fenced code as plain monospaced paragraphs — no border, no
+    shading, no background. One paragraph per source line so Google Docs can
+    flow it across pages cleanly."""
+    for line in code.splitlines() or [""]:
+        p = doc.add_paragraph()
+        pf = p.paragraph_format
+        pf.space_before = Pt(0)
+        pf.space_after = Pt(0)
+        pf.line_spacing = 1.15
+        pf.left_indent = Cm(1.0)
+        # Disable any default style background/borders inherited from the doc.
+        run = p.add_run(line if line else " ")
+        _set_run_font(run, name=MONO, size_pt=CODE_PT)
+    _new_paragraph(doc, space_after=4)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline
+# ---------------------------------------------------------------------------
+
+def _apply_default_style(doc):
+    """Set Normal style to single-serif 14 pt so any stray paragraph we don't
+    explicitly style still picks up the right typeface."""
+    style = doc.styles["Normal"]
+    style.font.name = SERIF
+    style.font.size = Pt(BODY_PT)
+    rpr = style.element.get_or_add_rPr()
+    rfonts = rpr.find(qn("w:rFonts"))
+    if rfonts is None:
+        rfonts = OxmlElement("w:rFonts")
+        rpr.append(rfonts)
+    for attr in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
+        rfonts.set(qn(attr), SERIF)
+
+
+def _apply_page_setup(doc):
+    section = doc.sections[0]
+    section.top_margin = Cm(2.0)
+    section.bottom_margin = Cm(2.0)
+    section.left_margin = Cm(2.5)
+    section.right_margin = Cm(1.5)
+
+
+def render(md_path: Path, docx_path: Path):
+    md_text = md_path.read_text(encoding="utf-8")
+    blocks = list(parse_blocks(md_text))
+    doc = Document()
+    _apply_default_style(doc)
+    _apply_page_setup(doc)
+    render_title_page(doc, blocks, raw_md=md_text)
+    render_body(doc, blocks)
+    doc.save(docx_path)
+    print(f"wrote {docx_path.name} ({docx_path.stat().st_size // 1024} KB)")
+
+
+def main(argv):
+    sources = [Path(p) for p in argv] if argv else sorted(ROOT.glob("bachelor-report-*.md"))
+    for md_path in sources:
+        render(md_path, md_path.with_suffix(".docx"))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
