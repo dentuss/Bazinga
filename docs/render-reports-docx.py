@@ -127,10 +127,12 @@ def _add_inline(paragraph, text: str, *, base_size=BODY_PT):
 
 
 def _add_run(paragraph, text: str, *, bold=False, italic=False, mono=False,
-             size_pt=BODY_PT):
+             size_pt=BODY_PT, color=None):
     if not text:
         return
     run = paragraph.add_run(text)
+    if color is not None:
+        run.font.color.rgb = RGBColor.from_string(color)
     _set_run_font(
         run,
         name=MONO if mono else SERIF,
@@ -280,8 +282,8 @@ def render_title_page(doc, blocks, raw_md=""):
             city_year = s
 
     for kind, payload in blocks:
-        if kind == "h2":
-            break
+        if kind == "h2" and payload.strip().upper() == "АНОТАЦІЯ":
+            break  # front matter ends here
         if kind == "table":
             header, rows = payload
             if header[:2] == ["№", "П.І.Б."]:
@@ -373,52 +375,75 @@ def render_title_page(doc, blocks, raw_md=""):
     if city_year:
         p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2)
         _add_run(p, city_year, size_pt=BODY_PT)
-
-    # Page break before the body
-    p = doc.add_paragraph()
-    run = p.add_run()
-    run.add_break()
-    _set_run_font(run, size_pt=BODY_PT)
-    last_run = run._element
-    pgbr = OxmlElement("w:br")
-    pgbr.set(qn("w:type"), "page")
-    last_run.append(pgbr)
+    # No manual page break here: the first body heading (АНОТАЦІЯ) carries
+    # page-break-before, which keeps the title on its own (unnumbered) page.
 
 
 # ---------------------------------------------------------------------------
 # Body rendering
 # ---------------------------------------------------------------------------
 
+def _styled_heading(doc, text, *, level, align, size_pt, page_break, upper, bookmark=None):
+    """Add a heading using the built-in Word Heading style (so the ЗМІСТ TOC
+    field can pick it up), then override look to single-serif black."""
+    style = "Heading 1" if level == 1 else "Heading 2" if level == 2 else "Heading 3"
+    p = doc.add_paragraph(style=style)
+    pf = p.paragraph_format
+    pf.space_before = Pt(6 if level == 1 else 4)
+    pf.space_after = Pt(6 if level == 1 else 4)
+    pf.line_spacing = 1.15
+    pf.keep_with_next = True
+    pf.page_break_before = page_break
+    p.alignment = align
+    if bookmark:
+        _add_bookmark(p, bookmark)
+    _add_run(p, text.upper() if upper else text, bold=True, size_pt=size_pt, color="000000")
+    return p
+
+
 def render_body(doc, blocks):
     h2_seen = False
+    skip_next_ul = False
     for kind, payload in blocks:
-        # Skip everything until we cross the first H2 (АНОТАЦІЯ) — that part is
-        # already handled by render_title_page.
+        # Skip the whole front matter (project title, team table, author,
+        # supervisor) — it is laid out by render_title_page. The body proper
+        # begins at the "АНОТАЦІЯ" heading.
         if not h2_seen:
-            if kind == "h2":
+            if kind == "h2" and payload.strip().upper() == "АНОТАЦІЯ":
                 h2_seen = True
             else:
                 continue
 
         if kind == "hr":
-            continue  # rendered as paragraph breaks elsewhere; skip the bar
+            continue  # the markdown horizontal rule is a structural separator only
         if kind == "h1":
-            p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=6,
-                               keep_with_next=True)
-            p.paragraph_format.page_break_before = True
-            _add_run(p, payload.upper(), bold=True, size_pt=H1_PT)
+            _styled_heading(doc, payload, level=1, align=WD_ALIGN_PARAGRAPH.CENTER,
+                            size_pt=H1_PT, page_break=True, upper=True)
         elif kind == "h2":
-            p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=8,
-                               keep_with_next=True)
-            p.paragraph_format.page_break_before = True
-            _add_run(p, payload.upper(), bold=True, size_pt=H2_PT)
+            bookmark = None
+            up = payload.strip().upper()
+            # The ЗМІСТ section becomes a live table-of-contents field.
+            if up == "ЗМІСТ":
+                _styled_heading(doc, payload, level=1, align=WD_ALIGN_PARAGRAPH.CENTER,
+                                size_pt=H1_PT, page_break=True, upper=True)
+                _render_toc(doc)
+                skip_next_ul = True
+                continue
+            if up.startswith("ДОДАТОК А"):
+                bookmark = "dodatok_a"
+            elif up.startswith("ДОДАТОК Б"):
+                bookmark = "dodatok_b"
+            _styled_heading(doc, payload, level=1, align=WD_ALIGN_PARAGRAPH.CENTER,
+                            size_pt=H1_PT, page_break=True, upper=True, bookmark=bookmark)
         elif kind == "h3":
-            p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.LEFT, space_after=4,
-                               keep_with_next=True)
-            _add_run(p, payload, bold=True, size_pt=H3_PT)
+            _styled_heading(doc, payload, level=2, align=WD_ALIGN_PARAGRAPH.LEFT,
+                            size_pt=H3_PT, page_break=False, upper=False)
         elif kind == "p":
             render_paragraph(doc, payload)
         elif kind == "ul":
+            if skip_next_ul:
+                skip_next_ul = False
+                continue
             for item in payload:
                 p = doc.add_paragraph(style="List Bullet")
                 p.paragraph_format.space_after = Pt(2)
@@ -436,19 +461,40 @@ def render_body(doc, blocks):
             render_code_block(doc, payload)
 
 
+def _render_toc(doc):
+    """Insert a live table-of-contents field (Heading 1–2). Word / Google Docs
+    populate page numbers on open / field-update."""
+    p = doc.add_paragraph()
+    p.paragraph_format.space_after = Pt(4)
+    _add_field(p, ' TOC \\o "1-2" \\h \\z \\u ',
+               "Зміст оновлюється автоматично (виділіть і натисніть F9).",
+               name=SERIF, size_pt=BODY_PT)
+
+
 def render_paragraph(doc, text: str):
     """Body paragraphs. Recognise our caption convention so 'Приклад N — …'
-    and 'Таблиця X — …' come out centred + italic + kept-with-next."""
+    and 'Таблиця X — …' come out centred + italic + kept-with-next; turn
+    references to appendices into internal hyperlinks."""
     is_caption = bool(re.match(r"^(Приклад|Таблиця|Рисунок|Лістинг)\s\S", text))
     if is_caption:
         p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2,
                            keep_with_next=True)
-        # Inline parsing so backticked file paths render in mono
         _add_inline_italic(p, text, size_pt=CAPTION_PT)
         return
     p = _new_paragraph(doc, align=WD_ALIGN_PARAGRAPH.JUSTIFY,
                        indent_first=True, space_after=4)
-    _add_inline(p, text)
+    # Split on appendix references and render those as internal hyperlinks.
+    pos = 0
+    for m in _DODATOK_REF.finditer(text):
+        anchor = _ANCHOR.get(m.group(1))
+        if not anchor:
+            continue
+        if m.start() > pos:
+            _add_inline(p, text[pos:m.start()])
+        _add_internal_hyperlink(p, m.group(0), anchor)
+        pos = m.end()
+    if pos < len(text):
+        _add_inline(p, text[pos:])
 
 
 def _add_inline_italic(paragraph, text: str, *, size_pt=CAPTION_PT):
@@ -539,12 +585,69 @@ def _apply_page_setup(doc):
     section.right_margin = Cm(1.5)
 
 
+def _add_field(paragraph, instr: str, placeholder: str = "", *, name=SERIF, size_pt=BODY_PT):
+    """Insert a Word complex field (e.g. PAGE, TOC) into `paragraph`."""
+    r1 = paragraph.add_run(); _set_run_font(r1, name=name, size_pt=size_pt)
+    f1 = OxmlElement("w:fldChar"); f1.set(qn("w:fldCharType"), "begin"); r1._element.append(f1)
+    r2 = paragraph.add_run(); _set_run_font(r2, name=name, size_pt=size_pt)
+    it = OxmlElement("w:instrText"); it.set(qn("xml:space"), "preserve"); it.text = instr
+    r2._element.append(it)
+    r3 = paragraph.add_run(); _set_run_font(r3, name=name, size_pt=size_pt)
+    f3 = OxmlElement("w:fldChar"); f3.set(qn("w:fldCharType"), "separate"); r3._element.append(f3)
+    r4 = paragraph.add_run(placeholder); _set_run_font(r4, name=name, size_pt=size_pt)
+    r5 = paragraph.add_run(); _set_run_font(r5, name=name, size_pt=size_pt)
+    f5 = OxmlElement("w:fldChar"); f5.set(qn("w:fldCharType"), "end"); r5._element.append(f5)
+
+
+def _add_page_number_footer(doc):
+    """Bottom-right page number on every page except the title page."""
+    section = doc.sections[0]
+    section.different_first_page_header_footer = True
+    # default (non-first) footer — carries the page number
+    footer = section.footer
+    footer.is_linked_to_previous = False
+    p = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+    p.text = ""
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    _add_field(p, " PAGE ", "2", name=SERIF, size_pt=12)
+    # first-page footer stays empty so the title page has no number
+    fp = section.first_page_footer
+    fp.is_linked_to_previous = False
+    if not fp.paragraphs:
+        fp.add_paragraph()
+
+
+def _add_bookmark(paragraph, name: str):
+    """Wrap a bookmark around the start of `paragraph` (for internal links)."""
+    bid = str(abs(hash(name)) % 100000)
+    start = OxmlElement("w:bookmarkStart"); start.set(qn("w:id"), bid); start.set(qn("w:name"), name)
+    end = OxmlElement("w:bookmarkEnd"); end.set(qn("w:id"), bid)
+    paragraph._p.insert(0, start)
+    paragraph._p.append(end)
+
+
+def _add_internal_hyperlink(paragraph, text: str, anchor: str, *, size_pt=BODY_PT):
+    """Append an internal hyperlink run (blue, underlined) pointing to a bookmark."""
+    hl = OxmlElement("w:hyperlink"); hl.set(qn("w:anchor"), anchor)
+    run = paragraph.add_run(text)
+    _set_run_font(run, name=SERIF, size_pt=size_pt, color="1A4A8A")
+    run.font.underline = True
+    hl.append(run._element)
+    paragraph._p.append(hl)
+
+
+# Detects references to appendices, e.g. "Додаток А", "Додатку А", "Додатка Б".
+_DODATOK_REF = re.compile(r"Додат(?:ок|ку|ка|кax)?\w*\s+([АБВГ])")
+_ANCHOR = {"А": "dodatok_a", "Б": "dodatok_b", "В": "dodatok_v", "Г": "dodatok_g"}
+
+
 def render(md_path: Path, docx_path: Path):
     md_text = md_path.read_text(encoding="utf-8")
     blocks = list(parse_blocks(md_text))
     doc = Document()
     _apply_default_style(doc)
     _apply_page_setup(doc)
+    _add_page_number_footer(doc)
     render_title_page(doc, blocks, raw_md=md_text)
     render_body(doc, blocks)
     doc.save(docx_path)
