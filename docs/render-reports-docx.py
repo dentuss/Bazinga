@@ -26,7 +26,7 @@ from typing import Iterable
 
 from docx import Document
 from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
@@ -402,6 +402,10 @@ def _styled_heading(doc, text, *, level, align, size_pt, page_break, upper, book
 
 
 def render_body(doc, blocks):
+    # Pre-compute the static ЗМІСТ once, using estimated page numbers from a
+    # height-accounting pass over all body blocks. This makes the TOC plain
+    # text (no live Word/Google Docs fields), exactly as requested.
+    toc_entries = _collect_toc_entries(blocks)
     h2_seen = False
     skip_next_ul = False
     for kind, payload in blocks:
@@ -426,7 +430,7 @@ def render_body(doc, blocks):
             if up == "ЗМІСТ":
                 _styled_heading(doc, payload, level=1, align=WD_ALIGN_PARAGRAPH.CENTER,
                                 size_pt=H1_PT, page_break=True, upper=True)
-                _render_toc(doc)
+                _render_static_toc(doc, toc_entries)
                 skip_next_ul = True
                 continue
             if up.startswith("ДОДАТОК А"):
@@ -461,14 +465,128 @@ def render_body(doc, blocks):
             render_code_block(doc, payload)
 
 
-def _render_toc(doc):
-    """Insert a live table-of-contents field (Heading 1–2). Word / Google Docs
-    populate page numbers on open / field-update."""
-    p = doc.add_paragraph()
-    p.paragraph_format.space_after = Pt(4)
-    _add_field(p, ' TOC \\o "1-2" \\h \\z \\u ',
-               "Зміст оновлюється автоматично (виділіть і натисніть F9).",
-               name=SERIF, size_pt=BODY_PT)
+# --- Static ЗМІСТ -----------------------------------------------------------
+# We render the TOC as plain paragraphs with a dot-leader tab and a numeric
+# page number instead of a Word TOC field. The numbers are estimated by a
+# simple height accounting over the parsed markdown blocks — it matches the
+# layout closely enough for a print-ready document, and the user can adjust
+# any line by hand without any field updates.
+
+# Body geometry assumptions (used only for the page-number estimator):
+#   • A4, margins top/bottom 2.0 cm, left 2.5 cm, right 1.5 cm
+#   • text area ≈ 25.7 cm × 17.0 cm
+#   • body 14 pt at 1.15 line spacing  → ~16.1 pt per line → ≈ 45 lines
+#   • code 11 pt at 1.15 line spacing  → ~12.7 pt per line
+# We use a slightly more conservative cap to allow for paragraph-after gaps,
+# captions and headings that don't quite fit the average.
+_PAGE_LINES = 36          # usable body lines per page after spacing overhead
+_CHARS_PER_LINE = 68      # approx. for 14 pt over 17 cm column
+_CODE_LINE_RATIO = 0.85   # 11 pt over 14 pt with similar leading
+
+
+def _collect_toc_entries(blocks):
+    """Walk parsed blocks and assign each TOC-able heading an estimated page.
+
+    Returns a list of tuples (level, text, page_no), where:
+      • level 1 → top-level section (АНОТАЦІЯ, ЗМІСТ, ВСТУП, РОЗДІЛ N, …),
+      • level 2 → numbered subsection (1.1, 2.1, …).
+    """
+    entries: list[tuple[int, str, int]] = []
+    started = False                    # body proper starts at АНОТАЦІЯ
+    in_appendix = False                # suppress subsection entries inside an appendix
+    page = 1                            # title page is page 1
+    lines = 0                           # lines accumulated on the current page
+
+    def page_break():
+        nonlocal page, lines
+        page += 1
+        lines = 0
+
+    def consume_lines(n: int):
+        """Account for `n` body-equivalent lines, breaking pages as needed."""
+        nonlocal page, lines
+        if n <= 0:
+            return
+        while n > 0:
+            free = _PAGE_LINES - lines
+            if n <= free:
+                lines += n
+                return
+            n -= free
+            page_break()
+
+    for kind, payload in blocks:
+        if not started:
+            if kind == "h2" and payload.strip().upper() == "АНОТАЦІЯ":
+                page_break()                # АНОТАЦІЯ lands on page 2
+                started = True
+                entries.append((1, payload.strip(), page))
+                lines = 3                   # heading itself takes ~3 lines
+            continue
+
+        if kind == "h2":
+            page_break()
+            text = payload.strip()
+            entries.append((1, text, page))
+            in_appendix = text.upper().startswith("ДОДАТОК")
+            lines = 3
+        elif kind == "h3":
+            # Subsections don't force a page break; if we're near the bottom,
+            # the heading will spill onto the next page anyway.
+            if lines + 4 > _PAGE_LINES:
+                page_break()
+            # Match the reference: subsections inside the appendix are not
+            # listed in the ЗМІСТ — only the appendix heading itself appears.
+            if not in_appendix:
+                entries.append((2, payload.strip(), page))
+            lines += 3
+        elif kind == "p":
+            words = max(1, len(payload.split()))
+            est_lines = max(1, (words * 7 + _CHARS_PER_LINE - 1) // _CHARS_PER_LINE) + 1
+            consume_lines(est_lines)
+        elif kind == "ul" or kind == "ol":
+            for item in payload:
+                words = max(1, len(item.split()))
+                est_lines = max(1, (words * 7 + _CHARS_PER_LINE - 1) // _CHARS_PER_LINE)
+                consume_lines(est_lines)
+        elif kind == "code":
+            code_lines = payload.count("\n") + 2
+            consume_lines(int(code_lines * _CODE_LINE_RATIO) + 1)
+        elif kind == "table":
+            header, rows = payload
+            # ≈ 2 body-line equivalents per table row + small gap.
+            consume_lines(2 * (len(rows) + 1) + 1)
+
+    return entries
+
+
+def _render_static_toc(doc, entries):
+    """Render the ЗМІСТ as plain paragraphs: text — dot leader — page number.
+
+    Each paragraph carries a right-aligned tab stop with a dot leader at the
+    right edge of the text column, so titles and numbers align like in the
+    reference report and a typical autoreferat.
+    """
+    for level, text, page in entries:
+        p = doc.add_paragraph()
+        pf = p.paragraph_format
+        pf.space_before = Pt(0)
+        pf.space_after = Pt(2)
+        pf.line_spacing = 1.15
+        if level == 2:
+            pf.left_indent = Cm(0.8)
+        pf.tab_stops.add_tab_stop(Cm(16.5), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS)
+
+        _add_run(p, text, bold=(level == 1), size_pt=BODY_PT)
+
+        # Tab character — the tab stop above pulls the page number to the
+        # right edge and fills the gap with dots.
+        tab_run = p.add_run()
+        _set_run_font(tab_run, size_pt=BODY_PT)
+        tab_elem = OxmlElement("w:tab")
+        tab_run._r.append(tab_elem)
+
+        _add_run(p, str(page), bold=(level == 1), size_pt=BODY_PT)
 
 
 def render_paragraph(doc, text: str):
