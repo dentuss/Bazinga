@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, Check, Lock, Save, ShieldOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ import { cn } from "@/lib/utils";
 const ProfileEditor = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const params = useParams();
   const {
     user,
@@ -97,7 +99,7 @@ const ProfileEditor = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      toast({ title: "Name is required", variant: "destructive" });
+      toast({ title: t("profile.nameRequired"), variant: "destructive" });
       return;
     }
     setSubmitting(true);
@@ -111,15 +113,18 @@ const ProfileEditor = () => {
       };
       if (isCreate) {
         await createProfile(payload);
-        toast({ title: "Profile created", description: `${payload.name} is ready to watch.` });
+        toast({
+          title: t("profile.profileCreated"),
+          description: t("profile.createdReady", { name: payload.name }),
+        });
       } else if (editingId !== null) {
         await saveProfile(editingId, payload);
-        toast({ title: "Profile saved", description: "Your changes have been stored." });
+        toast({ title: t("profile.profileSaved"), description: t("profile.changesSaved") });
       }
       navigate("/profiles/manage");
     } catch (err) {
       toast({
-        title: isCreate ? "Could not create profile" : "Could not save profile",
+        title: isCreate ? t("profile.couldNotCreate") : t("profile.couldNotSave"),
         description: err instanceof Error ? err.message : "Try again later.",
         variant: "destructive",
       });
@@ -133,11 +138,14 @@ const ProfileEditor = () => {
     setDeleting(true);
     try {
       await removeProfile(existing.id);
-      toast({ title: "Profile removed", description: `${existing.name} has been deleted.` });
+      toast({
+        title: t("profile.profileRemoved"),
+        description: t("profile.profileDeleted", { name: existing.name }),
+      });
       navigate("/profiles/manage");
     } catch (err) {
       toast({
-        title: "Could not remove profile",
+        title: t("profile.couldNotRemove"),
         description: err instanceof Error ? err.message : "Try again later.",
         variant: "destructive",
       });
@@ -157,7 +165,7 @@ const ProfileEditor = () => {
   const handleSetPin = async () => {
     if (!existing || !token) return;
     if (pinValue.length !== 4 || !/^[0-9]{4}$/.test(pinValue)) {
-      toast({ title: "PIN must be exactly 4 digits", variant: "destructive" });
+      toast({ title: t("profile.pinFourDigits"), variant: "destructive" });
       return;
     }
     setPinBusy(true);
@@ -172,10 +180,13 @@ const ProfileEditor = () => {
       await refreshProfiles();
       setPinValue("");
       setCurrentPinValue("");
-      toast({ title: existing.hasPin ? "PIN updated" : "PIN set", description: `${existing.name} is now locked.` });
+      toast({
+        title: existing.hasPin ? t("profile.pinUpdated") : t("profile.pinSet"),
+        description: t("profile.pinLocked", { name: existing.name }),
+      });
     } catch (err) {
       toast({
-        title: "Could not save PIN",
+        title: t("profile.couldNotSavePin"),
         description: err instanceof Error ? err.message : "Try again later.",
         variant: "destructive",
       });
@@ -196,10 +207,13 @@ const ProfileEditor = () => {
       );
       await refreshProfiles();
       setCurrentPinValue("");
-      toast({ title: "PIN removed", description: `${existing.name} is no longer locked.` });
+      toast({
+        title: t("profile.pinRemoved"),
+        description: t("profile.pinUnlocked", { name: existing.name }),
+      });
     } catch (err) {
       toast({
-        title: "Could not remove PIN",
+        title: t("profile.couldNotRemovePin"),
         description: err instanceof Error ? err.message : "Try again later.",
         variant: "destructive",
       });
@@ -214,25 +228,28 @@ const ProfileEditor = () => {
         <Link to="/" className="text-2xl font-black tracking-tighter text-primary">
           BAZINGA
         </Link>
-        <Button
-          variant="ghost"
-          onClick={() => navigate("/profiles/manage")}
-          className="gap-2"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to profiles
-        </Button>
+        {/* Back-to-profiles is only useful when editing an existing profile;
+           in create mode the wizard already has its own Cancel button next to
+           Save, and a second Back link confuses the flow. */}
+        {!isCreate && (
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/profiles/manage")}
+            className="gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {t("profile.backToProfiles")}
+          </Button>
+        )}
       </header>
 
       <main className="container mx-auto px-4 md:px-8 pb-16">
         <div className="max-w-3xl mx-auto">
           <h1 className="text-3xl md:text-5xl font-black tracking-tight">
-            {isCreate ? "Add Profile" : "Edit Profile"}
+            {isCreate ? t("profile.addProfile") : t("profile.editProfile")}
           </h1>
           <p className="mt-2 text-muted-foreground">
-            {isCreate
-              ? "Create a new face for someone else to watch as."
-              : "Update name, look, and parental settings."}
+            {isCreate ? t("profile.addSubtitle") : t("profile.editSubtitle")}
           </p>
 
           <form onSubmit={handleSubmit} className="mt-10 grid gap-8 md:grid-cols-[200px_1fr]">
@@ -246,19 +263,19 @@ const ProfileEditor = () => {
 
             <div className="space-y-6">
               <div className="grid gap-2">
-                <Label htmlFor="profile-name">Display name</Label>
+                <Label htmlFor="profile-name">{t("profile.displayName")}</Label>
                 <Input
                   id="profile-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Your nickname"
+                  placeholder={t("profile.nicknamePlaceholder")}
                   maxLength={100}
                   required
                 />
               </div>
 
               <div className="grid gap-3">
-                <Label>Avatar color</Label>
+                <Label>{t("profile.avatarColor")}</Label>
                 <div className="flex flex-wrap gap-2">
                   {PROFILE_PALETTE.map((color) => (
                     <button

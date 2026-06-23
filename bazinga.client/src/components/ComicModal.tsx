@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { BookOpen, Heart, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCollections } from "@/contexts/CollectionsContext";
@@ -41,6 +42,7 @@ const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
   const { isSaved, toggle } = useCollections();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const comicId = String(comic.id);
   const inLibrary = isSaved("library", "comic", comicId);
@@ -88,33 +90,33 @@ const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
   const description =
     comic.description ??
     meta?.description ??
-    "An epic adventure awaits in this thrilling comic series. Join your favourite heroes as they battle against the forces of evil and protect the universe from destruction.";
+    "";
 
   const genres = comic.genres ?? meta?.genres;
 
   return (
     <div
-      className="fixed inset-0 z-[95] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 z-[95] bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center p-2 sm:p-4 animate-fade-in overflow-y-auto"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={`${comic.title} details`}
     >
       <div
-        className="relative w-full max-w-3xl rounded-xl overflow-hidden border border-primary/40 bg-card shadow-[0_0_60px_hsl(0_82%_55%/0.4)]"
+        className="relative w-full max-w-3xl my-2 sm:my-0 rounded-xl overflow-hidden border border-primary/40 bg-card shadow-[0_0_60px_hsl(0_82%_55%/0.4)] max-h-[calc(100dvh-16px)] sm:max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3 right-3 z-10 h-9 w-9 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
-          aria-label="Close"
+          className="absolute top-3 right-3 z-20 h-9 w-9 rounded-full bg-black/80 hover:bg-black ring-1 ring-white/20 flex items-center justify-center transition-colors"
+          aria-label={t("modal.close")}
         >
           <X className="h-5 w-5" />
         </button>
 
-        <div className="grid md:grid-cols-[220px_1fr]">
-          <div className="relative bg-black aspect-[2/3] md:aspect-auto">
+        <div className="grid sm:grid-cols-[180px_1fr] md:grid-cols-[220px_1fr] overflow-y-auto">
+          <div className="relative bg-black aspect-[16/9] sm:aspect-auto sm:min-h-[280px]">
             <div
               aria-hidden
               className="absolute inset-0 bg-gradient-to-br from-primary/40 via-primary/15 to-orange-500/30"
@@ -132,9 +134,9 @@ const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
             />
           </div>
 
-          <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+          <div className="p-5 sm:p-6 space-y-4">
             <div>
-              <h2 className="text-2xl md:text-3xl font-black tracking-tight">{comic.title}</h2>
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight pr-12">{comic.title}</h2>
               {comic.series && (
                 <p className="text-sm text-muted-foreground">{comic.series}</p>
               )}
@@ -142,32 +144,36 @@ const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
 
             <div className="flex flex-wrap items-center gap-3 text-sm">
               {comic.issueNumber && (
-                <span className="font-bold text-primary">Issue #{comic.issueNumber}</span>
+                <span className="font-bold text-primary">{t("modal.issue")} #{comic.issueNumber}</span>
               )}
               {comic.year && <span className="text-muted-foreground">{comic.year}</span>}
               <span className="text-muted-foreground">{comic.creators}</span>
             </div>
 
-            <p
-              className={`text-sm text-muted-foreground leading-relaxed transition-[max-height] ${
-                expanded ? "max-h-none" : "max-h-24 overflow-hidden"
-              }`}
-            >
-              {description}
-            </p>
-            {description.length > 180 && (
-              <button
-                type="button"
-                onClick={() => setExpanded((p) => !p)}
-                className="text-xs font-bold text-primary hover:text-primary/80"
-              >
-                {expanded ? "Show less" : "Read more"}
-              </button>
+            {description && (
+              <>
+                <p
+                  className={`text-sm text-muted-foreground leading-relaxed transition-[max-height] ${
+                    expanded ? "max-h-none" : "max-h-24 overflow-hidden"
+                  }`}
+                >
+                  {description}
+                </p>
+                {description.length > 180 && (
+                  <button
+                    type="button"
+                    onClick={() => setExpanded((p) => !p)}
+                    className="text-xs font-bold text-primary hover:text-primary/80"
+                  >
+                    {expanded ? t("modal.showLess") : t("modal.readMore")}
+                  </button>
+                )}
+              </>
             )}
 
             {comic.creators && (
               <p className="text-xs">
-                <span className="text-muted-foreground mr-1">Authors:</span>
+                <span className="text-muted-foreground mr-1">{t("modal.authors")}:</span>
                 {comic.creators}
               </p>
             )}
@@ -188,7 +194,7 @@ const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
             <div className="flex flex-wrap gap-3 pt-2">
               {!user ? (
                 <Button asChild>
-                  <Link to="/auth">Sign in to read</Link>
+                  <Link to="/auth">{t("modal.signInToRead")}</Link>
                 </Button>
               ) : subscribed ? (
                 <Button
@@ -196,13 +202,13 @@ const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
                   onClick={handleRead}
                 >
                   <BookOpen className="h-4 w-4" />
-                  Read Now
+                  {t("modal.readNow")}
                 </Button>
               ) : (
                 <Button asChild className="bg-gradient-to-r from-primary to-orange-500 text-white">
                   <Link to="/bazinga-unlimited" onClick={onClose}>
                     <Sparkles className="h-4 w-4" />
-                    Subscribe to read
+                    {t("modal.subscribeToRead")}
                   </Link>
                 </Button>
               )}
@@ -213,16 +219,16 @@ const ComicModal = ({ isOpen, onClose, comic }: ComicModalProps) => {
                   className={inLibrary ? "border-primary bg-primary/10 text-primary hover:bg-primary/20" : ""}
                 >
                   <Heart className={`h-4 w-4 ${inLibrary ? "fill-current text-primary" : ""}`} />
-                  {inLibrary ? "In Library" : "Add to Library"}
+                  {inLibrary ? t("modal.inLibrary") : t("modal.addToLibrary")}
                 </Button>
               )}
             </div>
 
-            <p className="text-[11px] text-muted-foreground">
-              Part of the{" "}
-              <span className="text-foreground font-semibold">{comic.series ?? "Bazinga"}</span>{" "}
-              line on Bazinga Comics.
-            </p>
+            {comic.series && (
+              <p className="text-[11px] text-muted-foreground">
+                {t("modal.partOfLine", { series: comic.series })}
+              </p>
+            )}
           </div>
         </div>
       </div>

@@ -1,23 +1,35 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 interface BrowseByFilterProps {
   onFilterChange?: (type: string, value: string) => void;
   seriesOptions: string[];
   creatorOptions: string[];
+  genreOptions?: string[];
+  yearOptions?: string[];
 }
 
 const BrowseByFilter = ({
   onFilterChange,
   seriesOptions,
   creatorOptions,
+  genreOptions = [],
+  yearOptions = [],
 }: BrowseByFilterProps) => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("series");
   const [selectedValue, setSelectedValue] = useState("");
 
   const tabs = [
-    { id: "series", label: "SERIES" },
-    { id: "creator", label: "CREATOR" },
+    { id: "series", label: t("comics.series") },
+    { id: "creator", label: t("comics.creator") },
+    ...(genreOptions.length > 1
+      ? [{ id: "genre", label: t("comics.genre") }]
+      : []),
+    ...(yearOptions.length > 1
+      ? [{ id: "year", label: t("comics.year") }]
+      : []),
   ];
 
   const getOptions = () => {
@@ -26,6 +38,10 @@ const BrowseByFilter = ({
         return seriesOptions;
       case "creator":
         return creatorOptions;
+      case "genre":
+        return genreOptions;
+      case "year":
+        return yearOptions;
       default:
         return [];
     }
@@ -46,8 +62,10 @@ const BrowseByFilter = ({
 
   return (
     <div className="flex flex-col items-center gap-5 my-8">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold text-muted-foreground mr-4">BROWSE BY</span>
+      <div className="flex items-center gap-2 flex-wrap justify-center">
+        <span className="text-sm font-semibold text-muted-foreground mr-4">
+          {t("comics.browseBy")}
+        </span>
         <div className="flex gap-1 bg-muted rounded-md p-1 shadow-inner">
           {tabs.map((tab) => (
             <button
@@ -55,7 +73,7 @@ const BrowseByFilter = ({
               type="button"
               onClick={() => handleTabChange(tab.id)}
               className={cn(
-                "relative px-6 py-2 text-sm font-bold rounded transition-all duration-200",
+                "relative px-4 md:px-6 py-2 text-sm font-bold rounded transition-all duration-200",
                 activeTab === tab.id
                   ? "bg-background text-foreground shadow-md scale-[1.02]"
                   : "text-muted-foreground hover:text-foreground hover:scale-[1.02]"

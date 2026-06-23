@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import Header from "@/components/Header";
 import HeroCarousel from "@/components/HeroCarousel";
 import ComicSection from "@/components/ComicSection";
@@ -10,7 +11,6 @@ import ComicModal from "@/components/ComicModal";
 import MangaUniverse from "@/components/MangaUniverse";
 import MangaModal from "@/components/MangaModal";
 import { Button } from "@/components/ui/button";
-import { apiFetch } from "@/lib/api";
 import {
   comicMetaCreators,
   fetchComicsMeta,
@@ -18,23 +18,6 @@ import {
   type ComicMetaDto,
   type MangaDto,
 } from "@/lib/metadata";
-import {
-  placeholderComics,
-  type PlaceholderComic,
-} from "@/data/placeholderComics";
-
-export interface ComicDto {
-  id: number;
-  title: string;
-  author?: string;
-  description?: string;
-  mainCharacter?: string;
-  series?: string;
-  image: string;
-  price: number;
-  category?: { name: string };
-  createdAt?: string;
-}
 
 interface DisplayComic {
   id: number;
@@ -45,15 +28,12 @@ interface DisplayComic {
   image: string;
   description?: string;
   createdAt?: string;
-  /** Open Library work id — when set, the modal lazy-loads description + genres. */
   metaId?: number;
 }
 
-const HOME_COMIC_LIMIT = 20; // length of the horizontal rail on the homepage
-const NEW_THIS_WEEK_TOTAL = 12; // single rail of comics + manga, mixed
+const HOME_COMIC_LIMIT = 20;
+const NEW_THIS_WEEK_TOTAL = 12;
 
-// Carries enough state for a homepage tile to route its click to the right
-// modal — extra fields beyond the visible image/title/creators stay attached.
 interface MixedTile {
   image: string;
   title: string;
@@ -66,6 +46,7 @@ interface MixedTile {
 
 const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { t } = useTranslation();
   const [selectedComic, setSelectedComic] = useState<DisplayComic | null>(null);
   const [selectedManga, setSelectedManga] = useState<MangaDto | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -74,25 +55,16 @@ const Index = () => {
     value: "",
   });
 
-  const { data: comics = [] } = useQuery<ComicDto[]>({
-    queryKey: ["comics"],
-    queryFn: () => apiFetch<ComicDto[]>("/api/comics"),
-  });
-
-  // Tease the top manga so we can mix titles into New This Week without going
-  // to the full Manga Universe section.
   const topManga = useQuery({
     queryKey: ["manga-top", "home-mix"],
     queryFn: () => fetchTopManga(1, 12),
     staleTime: 30 * 60 * 1000,
   });
 
-  // Real superhero comic covers (Open Library, no auth). If the upstream is
-  // unreachable the response carries an empty list and we fall back to the
-  // curated placeholder set below.
+  // Wide metadata pull so BROWSE BY chips have something to work with.
   const comicsMetaQuery = useQuery({
     queryKey: ["comics-meta", "home", 1],
-    queryFn: () => fetchComicsMeta({ page: 1, limit: 24 }),
+    queryFn: () => fetchComicsMeta({ page: 1, limit: 36 }),
     staleTime: 60 * 60 * 1000,
   });
   const comicsMetaNewQuery = useQuery({
@@ -102,116 +74,88 @@ const Index = () => {
   });
   const metaHomeIssues = comicsMetaQuery.data?.data ?? [];
   const metaNewIssues = comicsMetaNewQuery.data?.data ?? [];
-  const metaConfigured = metaHomeIssues.length > 0;
 
-  const dbComics = useMemo<DisplayComic[]>(
-    () =>
-      comics.map((c) => ({
-        id: c.id,
-        title: c.title,
-        series: c.series ?? "",
-        character: c.mainCharacter ?? "",
-        creators: c.author ?? "",
-        image: c.image,
-        description: c.description,
-        createdAt: c.createdAt,
-      })),
-    [comics]
-  );
-
-  const fallbackComics = useMemo<DisplayComic[]>(
-    () =>
-      placeholderComics.map<DisplayComic>((p: PlaceholderComic) => ({
-        id: p.id,
-        title: p.title,
-        series: p.series,
-        character: p.character,
-        creators: p.creators,
-        image: p.image,
-        description: p.description,
-        createdAt: p.releaseDate,
-      })),
-    []
-  );
-
-  // Always use the placeholder catalogue on the home shelf — DB-stored comics
-  // can ship without covers/descriptions which leaves the homepage looking
-  // broken. The full catalog at /comics/all still merges DB results when present.
-  const allComics: DisplayComic[] = fallbackComics;
-  // Keep dbComics around to dedupe browse-filter options when populated.
-  void dbComics;
-
+  // The browse-by chips are now sourced entirely from live metadata: series,
+  // creators and genres collected from the comics we actually have on screen.
   const browseOptions = useMemo(() => {
     const sorted = (arr: string[]) =>
       Array.from(new Set(arr.filter((v) => v.trim().length > 0))).sort((a, b) =>
         a.localeCompare(b, undefined, { sensitivity: "base" })
       );
-    // Creators come from the comics we can actually filter on (placeholder + DB),
-    // not from the manga API — that mismatch is why the filter previously yielded
-    // 0 results when a manga author chip was clicked.
-    const creatorsFromComics = allComics.flatMap((c) =>
-      c.creators.split(",").map((s) => s.trim())
-    );
+    const allMeta = [...metaHomeIssues, ...metaNewIssues];
     return {
-      series: ["All Series", ...sorted(allComics.map((c) => c.series))],
-      creator: ["All Creators", ...sorted(creatorsFromComics)],
+      series: [t("comics.allSeries"), ...sorted(allMeta.map((m) => m.series ?? ""))],
+      creator: [t("comics.allCreators"), ...sorted(allMeta.flatMap((m) => m.creators))],
+      genre: [t("comics.allGenres"), ...sorted(allMeta.flatMap((m) => m.genres))],
+      year: [
+        t("comics.allYears"),
+        ...sorted(allMeta.map((m) => (m.year ? String(m.year) : ""))).reverse(),
+      ],
     };
-  }, [allComics]);
+  }, [metaHomeIssues, metaNewIssues, t]);
 
   const searchQuery = searchParams.get("search") || "";
   const viewAll = searchParams.get("view") === "all";
 
+  // Build a unified list of all metadata comics for filtering / search.
+  const allMetaComics = useMemo<DisplayComic[]>(() => {
+    const merged = [...metaHomeIssues, ...metaNewIssues];
+    return merged.map<DisplayComic>((m) => ({
+      id: m.id,
+      title: m.title,
+      series: m.series ?? "",
+      character: "",
+      creators: comicMetaCreators(m),
+      image: m.image ?? m.thumbnail ?? "",
+      description: m.description ?? undefined,
+      createdAt: m.year ? `${m.year}` : undefined,
+      metaId: m.id,
+    }));
+  }, [metaHomeIssues, metaNewIssues]);
+
   const filteredComics = useMemo(() => {
-    let list = [...allComics];
+    let list = [...allMetaComics];
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
         (c) =>
           c.title.toLowerCase().includes(q) ||
           c.creators.toLowerCase().includes(q) ||
-          c.series.toLowerCase().includes(q) ||
-          c.character.toLowerCase().includes(q)
+          c.series.toLowerCase().includes(q)
       );
     }
-    if (browseFilter.value && !browseFilter.value.startsWith("All")) {
-      list = list.filter((c) => {
-        if (browseFilter.type === "series") return c.series === browseFilter.value;
-        if (browseFilter.type === "creator")
-          return c.creators.toLowerCase().includes(browseFilter.value.toLowerCase());
-        return true;
-      });
+    if (browseFilter.value && !browseFilter.value.startsWith(t("comics.allSeries").split(" ")[0])) {
+      const isAll = browseFilter.value.toLowerCase().includes("all");
+      if (!isAll) {
+        list = list.filter((c) => {
+          const meta = [...metaHomeIssues, ...metaNewIssues].find((m) => m.id === c.id);
+          if (!meta) return false;
+          if (browseFilter.type === "series") return (meta.series ?? "") === browseFilter.value;
+          if (browseFilter.type === "creator")
+            return meta.creators.some((cr) =>
+              cr.toLowerCase().includes(browseFilter.value.toLowerCase())
+            );
+          if (browseFilter.type === "genre")
+            return meta.genres.some(
+              (g) => g.toLowerCase() === browseFilter.value.toLowerCase()
+            );
+          if (browseFilter.type === "year")
+            return meta.year && String(meta.year) === browseFilter.value;
+          return true;
+        });
+      }
     }
     return list;
-  }, [searchQuery, browseFilter, allComics]);
+  }, [searchQuery, browseFilter, allMetaComics, metaHomeIssues, metaNewIssues, t]);
 
-  /**
-   * "New This Week" mixes comic-side issues with the freshest manga scores.
-   * When live comic covers are available the comic half comes from Open
-   * Library; otherwise we use the placeholder catalog as before.
-   */
   const newThisWeek = useMemo<MixedTile[]>(() => {
     const half = Math.ceil(NEW_THIS_WEEK_TOTAL / 2);
-
-    const comicTiles: MixedTile[] = metaConfigured && metaNewIssues.length > 0
-      ? metaNewIssues.slice(0, half).map((m) => ({
-          image: m.image ?? m.thumbnail ?? "",
-          title: m.title,
-          creators: comicMetaCreators(m),
-          _meta: m,
-        }))
-      : [...allComics]
-          .sort(
-            (a, b) =>
-              new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
-          )
-          .slice(0, half)
-          .map((c) => ({
-            image: c.image,
-            title: c.title,
-            creators: c.creators,
-            _comic: c,
-          }));
-
+    const comicTiles: MixedTile[] = metaNewIssues.slice(0, half).map((m) => ({
+      image: m.image ?? m.thumbnail ?? "",
+      title: m.title,
+      creators: comicMetaCreators(m),
+      _meta: m,
+    }));
     const mangaSlice: MixedTile[] = (topManga.data?.data ?? [])
       .slice(0, Math.floor(NEW_THIS_WEEK_TOTAL / 2))
       .map((m) => ({
@@ -221,7 +165,6 @@ const Index = () => {
         score: m.score,
         _manga: m,
       }));
-    // Interleave so it doesn't look segregated.
     const out: MixedTile[] = [];
     const max = Math.max(comicTiles.length, mangaSlice.length);
     for (let i = 0; i < max; i++) {
@@ -229,24 +172,18 @@ const Index = () => {
       if (mangaSlice[i]) out.push(mangaSlice[i]);
     }
     return out.slice(0, NEW_THIS_WEEK_TOTAL);
-  }, [allComics, topManga.data, metaConfigured, metaNewIssues]);
+  }, [topManga.data, metaNewIssues]);
 
-  const homeComics = useMemo<MixedTile[]>(() => {
-    if (metaConfigured && metaHomeIssues.length > 0) {
-      return metaHomeIssues.slice(0, HOME_COMIC_LIMIT).map((m) => ({
+  const homeComics = useMemo<MixedTile[]>(
+    () =>
+      metaHomeIssues.slice(0, HOME_COMIC_LIMIT).map((m) => ({
         image: m.image ?? m.thumbnail ?? "",
         title: m.title,
         creators: comicMetaCreators(m),
         _meta: m,
-      }));
-    }
-    return allComics.slice(0, HOME_COMIC_LIMIT).map((c) => ({
-      image: c.image,
-      title: c.title,
-      creators: c.creators,
-      _comic: c,
-    }));
-  }, [allComics, metaConfigured, metaHomeIssues]);
+      })),
+    [metaHomeIssues]
+  );
 
   const isFiltered = Boolean(searchQuery) || Boolean(browseFilter.value) || viewAll;
 
@@ -310,6 +247,8 @@ const Index = () => {
           onFilterChange={handleBrowseFilterChange}
           seriesOptions={browseOptions.series}
           creatorOptions={browseOptions.creator}
+          genreOptions={browseOptions.genre}
+          yearOptions={browseOptions.year}
         />
 
         {isFiltered ? (
@@ -317,16 +256,16 @@ const Index = () => {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-black text-foreground">
                 {searchQuery
-                  ? `SEARCH RESULTS FOR "${searchQuery.toUpperCase()}"`
+                  ? `${t("comics.searchResults")} "${searchQuery.toUpperCase()}"`
                   : viewAll
-                    ? "COMICS"
-                    : "FILTERED RESULTS"}
+                    ? t("comics.comicsTitle")
+                    : t("comics.filteredResults")}
                 <span className="text-muted-foreground text-lg font-normal ml-2">
-                  ({filteredComics.length} comics)
+                  ({t("comics.countComics", { count: filteredComics.length })})
                 </span>
               </h2>
               <Button variant="outline" onClick={clearFilters}>
-                Clear filters
+                {t("comics.clearFilters")}
               </Button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
@@ -358,11 +297,9 @@ const Index = () => {
             </div>
             {filteredComics.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-muted-foreground text-lg">
-                  No comics found matching your criteria.
-                </p>
+                <p className="text-muted-foreground text-lg">{t("comics.noMatches")}</p>
                 <Button variant="link" onClick={clearFilters} className="mt-2">
-                  Clear all filters
+                  {t("comics.clearAll")}
                 </Button>
               </div>
             )}
@@ -371,14 +308,14 @@ const Index = () => {
           <>
             <ComicSection
               id="new-this-week"
-              title="NEW THIS WEEK"
+              title={t("comics.newThisWeek")}
               comics={newThisWeek}
               showViewAll={false}
               onComicClick={handleTileClick}
             />
             <ComicSection
               id="comics"
-              title="COMICS"
+              title={t("comics.comicsTitle")}
               comics={homeComics}
               viewAllHref="/comics/all"
               rows={2}

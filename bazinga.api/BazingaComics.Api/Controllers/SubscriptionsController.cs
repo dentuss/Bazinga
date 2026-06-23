@@ -1,6 +1,7 @@
 using BazingaComics.Api.Data;
 using BazingaComics.Api.Dtos;
 using BazingaComics.Api.Security;
+using BazingaComics.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,7 +13,58 @@ namespace BazingaComics.Api.Controllers;
 public class SubscriptionsController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public SubscriptionsController(AppDbContext db) => _db = db;
+    private readonly IBillingService _billing;
+
+    public SubscriptionsController(AppDbContext db, IBillingService billing)
+    {
+        _db = db;
+        _billing = billing;
+    }
+
+    /// <summary>
+    /// Creates a Stripe SetupIntent for the signed-in user so the checkout
+    /// can collect a card via Stripe Elements before changing the plan. When
+    /// Stripe isn't configured the response signals the client to fall back
+    /// to a mock card form, matching the signup wizard's behaviour.
+    /// </summary>
+    [HttpPost("billing-intent")]
+    public async Task<ActionResult<BillingIntentResponse>> CreateBillingIntent(CancellationToken ct)
+    {
+        var user = await CurrentUser.GetAsync(User, _db, ct);
+        if (user is null) return Unauthorized();
+
+        if (!_billing.IsConfigured)
+        {
+            return Ok(new BillingIntentResponse { StripeConfigured = false });
+        }
+
+        try
+        {
+            var intent = await _billing.CreateSetupIntentAsync(user.Email, ct);
+            return Ok(new BillingIntentResponse
+            {
+                StripeConfigured = true,
+                ClientSecret = intent.ClientSecret,
+                CustomerId = intent.CustomerId,
+                PublishableKey = _billing.PublishableKey,
+            });
+        }
+        catch (Stripe.StripeException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway,
+                $"Stripe rejected the request: {ex.StripeError?.Message ?? ex.Message}");
+        }
+        catch (OperationCanceledException)
+        {
+            return StatusCode(StatusCodes.Status504GatewayTimeout,
+                "Timed out reaching Stripe. The server may be unable to reach api.stripe.com.");
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(StatusCodes.Status504GatewayTimeout,
+                $"Could not reach Stripe ({ex.Message}). Check the server's outbound network access.");
+        }
+    }
 
     [HttpPost("subscribe")]
     public async Task<ActionResult<SubscriptionResponse>> Subscribe([FromBody] SubscriptionRequest req, CancellationToken ct)

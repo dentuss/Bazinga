@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
 import { BookOpen, Tv } from "lucide-react";
+import LanguagePicker from "@/components/LanguagePicker";
 import comic1 from "@/assets/comic-1.jpg";
 import comic2 from "@/assets/comic-2.jpg";
 import comic3 from "@/assets/comic-3.jpg";
@@ -14,6 +16,7 @@ const comicCollage = [comic1, comic2, comic3, comic4, comic5, comic6];
 
 const Choice = () => {
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black text-foreground">
@@ -24,14 +27,18 @@ const Choice = () => {
             BAZINGA
           </Link>
           <p className="mt-1 text-[10px] md:text-xs font-semibold uppercase tracking-[0.4em] text-white/60">
-            Choose your experience
+            {t("choice.chooseExperience")}
           </p>
         </div>
-        {user && (
-          <p className="text-sm text-white/70 pointer-events-auto hidden md:block">
-            Welcome back, <span className="font-semibold text-white">{user.username}</span>
-          </p>
-        )}
+        <div className="pointer-events-auto flex items-center gap-3">
+          {user && (
+            <p className="text-sm text-white/70 hidden md:block">
+              {t("choice.welcomeBack")},{" "}
+              <span className="font-semibold text-white">{user.username}</span>
+            </p>
+          )}
+          <LanguagePicker variant="outline" />
+        </div>
       </div>
 
       <div className="group/root flex h-full w-full flex-col md:flex-row">
@@ -80,7 +87,7 @@ const Choice = () => {
             <div className="flex items-center gap-3 mb-4 transition-transform duration-700 group-hover/comics:-translate-y-2">
               <BookOpen className="h-8 w-8 md:h-10 md:w-10 text-primary drop-shadow-[0_0_12px_hsl(0_82%_55%/0.9)]" />
               <span className="text-xs md:text-sm font-bold uppercase tracking-[0.4em] text-primary">
-                Read
+                {t("choice.read")}
               </span>
             </div>
             <h2 className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)] transition-transform duration-700 group-hover/comics:scale-105">
@@ -88,10 +95,10 @@ const Choice = () => {
               <span className="block text-primary">COMICS</span>
             </h2>
             <p className="mt-6 text-base md:text-lg text-white/80 max-w-md transition-opacity duration-500 opacity-80 group-hover/comics:opacity-100">
-              Dive into thousands of issues — heroes, villains and the legends in between.
+              {t("choice.comicsTagline")}
             </p>
             <div className="mt-8 inline-flex items-center gap-3 px-8 py-3 border-2 border-primary text-primary font-bold tracking-widest uppercase translate-y-4 opacity-0 transition-all duration-500 group-hover/comics:translate-y-0 group-hover/comics:opacity-100 group-hover/comics:bg-primary group-hover/comics:text-primary-foreground">
-              Enter Comics
+              {t("choice.enterComics")}
             </div>
           </div>
         </Link>
@@ -147,7 +154,7 @@ const Choice = () => {
             <div className="flex items-center gap-3 mb-4 transition-transform duration-700 group-hover/tv:-translate-y-2">
               <Tv className="h-8 w-8 md:h-10 md:w-10 text-orange-500 drop-shadow-[0_0_12px_hsl(25_95%_55%/0.9)]" />
               <span className="text-xs md:text-sm font-bold uppercase tracking-[0.4em] text-orange-500">
-                Watch
+                {t("choice.watch")}
               </span>
             </div>
             <h2 className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)] transition-transform duration-700 group-hover/tv:scale-105">
@@ -155,10 +162,10 @@ const Choice = () => {
               <span className="block text-orange-500">TV</span>
             </h2>
             <p className="mt-6 text-base md:text-lg text-white/80 max-w-md transition-opacity duration-500 opacity-80 group-hover/tv:opacity-100">
-              Animated series, live action and anime — straight from the Bazinga universe.
+              {t("choice.tvTagline")}
             </p>
             <div className="mt-8 inline-flex items-center gap-3 px-8 py-3 border-2 border-orange-500 text-orange-500 font-bold tracking-widest uppercase translate-y-4 opacity-0 transition-all duration-500 group-hover/tv:translate-y-0 group-hover/tv:opacity-100 group-hover/tv:bg-orange-500 group-hover/tv:text-black">
-              Enter BazingaTV
+              {t("choice.enterTV")}
             </div>
           </div>
         </Link>

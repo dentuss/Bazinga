@@ -1,12 +1,12 @@
 import SiteHeader, { type SiteHeaderNavItem } from "@/components/SiteHeader";
 
 const navItems: SiteHeaderNavItem[] = [
-  { label: "News", to: "/news" },
-  { label: "Comics", to: "/comics/all" },
-  { label: "Characters", to: "/characters" },
-  { label: "Manga", to: "/manga" },
-  { label: "Library", to: "/library", tone: "red" },
-  { label: "TV", to: "/bazinga-tv", tone: "orange", emphasize: true },
+  { label: "News", labelKey: "header.news", to: "/news" },
+  { label: "Comics", labelKey: "header.comics", to: "/comics/all" },
+  { label: "Characters", labelKey: "header.characters", to: "/characters" },
+  { label: "Manga", labelKey: "header.manga", to: "/manga" },
+  { label: "Library", labelKey: "header.library", to: "/library", tone: "red" },
+  { label: "TV", labelKey: "header.tv", to: "/bazinga-tv", tone: "orange", emphasize: true },
 ];
 
 const Header = () => (
@@ -14,7 +14,7 @@ const Header = () => (
     brand={{ layout: "stacked", accentText: "COMICS", accentColor: "red" }}
     navItems={navItems}
     avatarAccent="red"
-    homeLink="/comics"
+    homeLink="/"
   />
 );
 

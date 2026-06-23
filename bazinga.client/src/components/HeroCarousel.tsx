@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -26,6 +27,7 @@ const slides = [
 
 const HeroCarousel = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const { t } = useTranslation();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -37,40 +39,61 @@ const HeroCarousel = () => {
   const nextSlide = () => setCurrentSlide((prev) => (prev + 1) % slides.length);
   const prevSlide = () => setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
 
+  const slide = slides[currentSlide];
+
   return (
     <section id="hero" className="relative h-[500px] md:h-[600px] overflow-hidden">
-      {slides.map((slide, index) => (
+      {/* Background images: each slide layered absolutely, crossfade via opacity */}
+      {slides.map((s, index) => (
         <div
           key={index}
+          aria-hidden={index !== currentSlide}
           className={`absolute inset-0 transition-opacity duration-1000 ${
             index === currentSlide ? "opacity-100" : "opacity-0"
           }`}
         >
           <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent z-10" />
           <img
-            src={slide.image}
-            alt={slide.title}
+            src={s.image}
+            alt=""
             className="h-full w-full object-cover"
           />
-          <div className="absolute inset-0 z-20 flex items-center">
-            <div className="container mx-auto px-4">
-              <div className="max-w-2xl space-y-6 animate-fade-in">
-                <h1 className="text-4xl md:text-6xl font-black leading-tight">
-                  {slide.title}
-                </h1>
-                <p className="text-lg md:text-xl text-muted-foreground">
-                  {slide.description}
-                </p>
-                <Link to="/news">
-                  <Button variant="hero" size="lg">
-                    READ MORE
-                  </Button>
-                </Link>
-              </div>
+        </div>
+      ))}
+
+      {/* Foreground content lives in a SINGLE column that doesn't move when
+         the slide changes — only its text content swaps. Reserving a fixed
+         min-height for the title block keeps the CTA button anchored to the
+         same baseline so it no longer "jumps" between slides. */}
+      <div className="absolute inset-0 z-20 flex items-center pointer-events-none">
+        <div className="container mx-auto px-4 pointer-events-auto">
+          <div className="max-w-2xl flex flex-col gap-6">
+            <div className="min-h-[140px] md:min-h-[200px] flex flex-col justify-end">
+              <h1
+                key={`title-${currentSlide}`}
+                className="text-4xl md:text-6xl font-black leading-tight animate-fade-in"
+              >
+                {slide.title}
+              </h1>
+            </div>
+            <div className="min-h-[56px] md:min-h-[64px] flex items-start">
+              <p
+                key={`desc-${currentSlide}`}
+                className="text-lg md:text-xl text-muted-foreground animate-fade-in"
+              >
+                {slide.description}
+              </p>
+            </div>
+            <div>
+              <Link to="/news">
+                <Button variant="hero" size="lg">
+                  {t("hero.readMore")}
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
-      ))}
+      </div>
 
       {/* Navigation Arrows */}
       <button

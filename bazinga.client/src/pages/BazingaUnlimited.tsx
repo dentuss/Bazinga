@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, BookOpen, Tv, Sparkles, Check, ShieldAlert } from "lucide-react";
 
 type Plan = {
@@ -79,6 +80,7 @@ const BazingaUnlimited = () => {
   const { user, trialExpired } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const fromTrialExpired = searchParams.get("from") === "trial-expired" || trialExpired;
 
@@ -90,8 +92,8 @@ const BazingaUnlimited = () => {
 
     if (user.role && user.role !== "USER") {
       toast({
-        title: "Subscription unavailable",
-        description: "Subscriptions are only available for standard user accounts.",
+        title: t("subscription.onlyForStandard"),
+        description: t("subscription.onlyForStandardBody"),
         variant: "destructive",
       });
       return;
@@ -111,7 +113,7 @@ const BazingaUnlimited = () => {
             className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back
+            {t("subscription.back")}
           </button>
         )}
 
@@ -119,23 +121,20 @@ const BazingaUnlimited = () => {
           <div className="max-w-3xl mx-auto mb-10 rounded-xl border-2 border-orange-500/50 bg-orange-500/10 p-5 flex items-start gap-4">
             <ShieldAlert className="h-6 w-6 text-orange-500 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="font-bold text-foreground">Your 7-day trial has ended</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Pick a plan below to keep reading and watching. Your account, profiles and viewing
-                history stay exactly where you left them.
-              </p>
+              <p className="font-bold text-foreground">{t("subscription.trialEnded")}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{t("subscription.trialEndedBody")}</p>
             </div>
           </div>
         )}
 
         <div className="max-w-4xl mx-auto text-center space-y-4">
           <p className="text-sm font-semibold uppercase tracking-[0.3em] bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">
-            Bazinga Subscriptions
+            {t("subscription.label")}
           </p>
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight">Choose your universe</h1>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
-            Read the comics, stream the shows, or unlock everything with one Unlimited account.
-          </p>
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight">
+            {t("subscription.title")}
+          </h1>
+          <p className="text-muted-foreground max-w-2xl mx-auto">{t("subscription.subtitle")}</p>
         </div>
 
         <div className="mt-12 grid gap-8 lg:grid-cols-3">
@@ -162,7 +161,7 @@ const BazingaUnlimited = () => {
               >
                 {plan.highlight && (
                   <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.3em] bg-gradient-to-r from-primary to-orange-500 text-white rounded-full px-3 py-1">
-                    Best Value
+                    {t("subscription.bestValue")}
                   </span>
                 )}
 
@@ -182,9 +181,11 @@ const BazingaUnlimited = () => {
 
                 <p className="mt-6 text-sm text-muted-foreground">
                   <span className={`text-3xl font-black ${plan.accentText}`}>${plan.monthly.toFixed(2)}</span>
-                  <span className="ml-1">/ month</span>
+                  <span className="ml-1">{t("subscription.monthly")}</span>
                 </p>
-                <p className="text-xs text-muted-foreground">or ${plan.yearly.toFixed(2)} / year</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("subscription.yearly", { price: plan.yearly.toFixed(2) })}
+                </p>
 
                 <ul className="mt-6 space-y-3 text-sm text-foreground/85 flex-1">
                   {plan.benefits.map((benefit) => (
@@ -207,7 +208,7 @@ const BazingaUnlimited = () => {
                     }`}
                     onClick={() => handleSubscribe(plan.id, "monthly")}
                   >
-                    Subscribe Monthly
+                    {t("subscription.subscribeMonthly")}
                   </Button>
                   <Button
                     size="lg"
@@ -215,7 +216,7 @@ const BazingaUnlimited = () => {
                     className={`w-full border-2 ${plan.accentBorder} ${plan.accentText}`}
                     onClick={() => handleSubscribe(plan.id, "yearly")}
                   >
-                    Subscribe Yearly
+                    {t("subscription.subscribeYearly")}
                   </Button>
                 </div>
               </div>
@@ -224,7 +225,7 @@ const BazingaUnlimited = () => {
         </div>
 
         <p className="mt-10 text-center text-xs text-muted-foreground">
-          Cancel anytime. Taxes may apply.
+          {t("subscription.cancelAnytime")}
         </p>
       </main>
       <Footer />

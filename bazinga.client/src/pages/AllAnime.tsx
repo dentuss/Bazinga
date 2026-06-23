@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import TVHeader from "@/components/TVHeader";
 import AnimeModal from "@/components/AnimeModal";
@@ -60,6 +61,7 @@ const AnimeGridCard = ({
 );
 
 const AllAnime = () => {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const urlQ = (searchParams.get("q") ?? "").trim();
   const [query, setQuery] = useState(urlQ);
@@ -132,10 +134,10 @@ const AllAnime = () => {
               BazingaTV
             </p>
             <h1 className="mt-3 text-4xl md:text-6xl font-black tracking-tighter leading-[0.95]">
-              All Anime
+              {t("anime.allAnimeTitle")}
             </h1>
             <p className="mt-4 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
-              Every anime in the catalogue — sourced live from MyAnimeList.
+              {t("anime.catalogSummary")}
             </p>
           </div>
         </section>
@@ -143,7 +145,7 @@ const AllAnime = () => {
         <section className="container mx-auto px-4 md:px-8 py-8 md:py-12">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div className="flex flex-wrap gap-2">
-              <GenreChip label="Top picks" active={genre === null} onClick={() => setGenre(null)} />
+              <GenreChip label={t("anime.topPicks")} active={genre === null} onClick={() => setGenre(null)} />
               {curatedGenres.map((g) => (
                 <GenreChip
                   key={g.malId}
@@ -158,7 +160,7 @@ const AllAnime = () => {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search anime…"
+                placeholder={t("anime.searchPlaceholder")}
                 className="w-full h-10 rounded-md bg-card border border-border pl-9 pr-3 text-sm outline-none focus:border-orange-500"
               />
             </div>
@@ -168,11 +170,11 @@ const AllAnime = () => {
             {list.isLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-16">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading anime…
+                {t("anime.loading")}
               </div>
             ) : items.length === 0 ? (
               <p className="text-sm text-muted-foreground py-16 text-center">
-                No anime match — try a different filter or search.
+                {t("anime.noneFound")}
               </p>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4">
@@ -184,7 +186,7 @@ const AllAnime = () => {
             {list.isFetching && !list.isLoading && (
               <div className="absolute top-0 right-0 text-xs text-muted-foreground flex items-center gap-1.5">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                Updating…
+                {t("manga.updating")}
               </div>
             )}
           </div>
@@ -192,14 +194,15 @@ const AllAnime = () => {
           {pagination && pagination.lastVisiblePage > 1 && (
             <div className="mt-8 flex items-center justify-center gap-3">
               <PagerButton disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} direction="prev">
-                Previous
+                {t("comics.previous")}
               </PagerButton>
               <span className="text-sm text-muted-foreground">
-                Page <strong className="text-foreground">{pagination.currentPage}</strong> of{" "}
-                {pagination.lastVisiblePage}
+                {t("comics.page")}{" "}
+                <strong className="text-foreground">{pagination.currentPage}</strong>{" "}
+                {t("comics.of")} {pagination.lastVisiblePage}
               </span>
               <PagerButton disabled={!pagination.hasNextPage} onClick={() => setPage((p) => p + 1)} direction="next">
-                Next
+                {t("comics.next")}
               </PagerButton>
             </div>
           )}

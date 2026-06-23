@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ComicModal from "@/components/ComicModal";
@@ -47,6 +48,7 @@ const mangaFromItem = (item: CollectionItem): MangaDto => {
 const Library = () => {
   const { token, currentProfile } = useAuth();
   const { library } = useCollections();
+  const { t } = useTranslation();
   const [openComic, setOpenComic] = useState<ComicPayload | null>(null);
   const [openManga, setOpenManga] = useState<MangaDto | null>(null);
 
@@ -61,9 +63,9 @@ const Library = () => {
       <main>
         {!token ? (
           <div className="container mx-auto px-4 py-24 text-center space-y-4">
-            <p className="text-muted-foreground">Sign in to view your library.</p>
+            <p className="text-muted-foreground">{t("library.signInPrompt")}</p>
             <Link to="/auth">
-              <Button size="lg">Sign in</Button>
+              <Button size="lg">{t("library.signIn")}</Button>
             </Link>
           </div>
         ) : (
@@ -71,13 +73,17 @@ const Library = () => {
             collection="library"
             items={library}
             accent="red"
-            title={`${currentProfile?.name ?? "Your"} Library`}
-            subtitle="Comics and manga you've saved. Each profile keeps its own library — add titles with the heart on any comic or manga."
-            emptyMessage="Your library is empty. Tap the heart on a comic or manga to add it here."
+            title={
+              currentProfile?.name
+                ? t("library.nameLibrary", { name: currentProfile.name })
+                : t("library.yourLibrary")
+            }
+            subtitle={t("library.subtitle")}
+            emptyMessage={t("library.empty")}
             tabs={[
-              { value: "all", label: "All" },
-              { value: "comic", label: "Comics" },
-              { value: "manga", label: "Manga" },
+              { value: "all", label: t("library.tabAll") },
+              { value: "comic", label: t("library.tabComics") },
+              { value: "manga", label: t("library.tabManga") },
             ]}
             onOpen={handleOpen}
           />

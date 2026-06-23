@@ -1,12 +1,15 @@
 import { Facebook, Twitter, Instagram, Youtube, Twitch } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 const Footer = () => {
+  const { t } = useTranslation();
+
   const links = [
-    { label: "ABOUT BAZINGA", href: "/about-bazinga" },
-    { label: "HELP/FAQS", href: "/faqs" },
-    { label: "CAREERS", href: "/careers" },
-    { label: "INTERNSHIPS", href: "/internships" },
+    { label: t("footer.aboutBazinga"), href: "/about-bazinga" },
+    { label: t("footer.helpFaqs"), href: "/faqs" },
+    { label: t("footer.careers"), href: "/careers" },
+    { label: t("footer.internships"), href: "/internships" },
   ];
 
   const socialLinks = [
@@ -18,10 +21,10 @@ const Footer = () => {
   ];
 
   const legalLinks = [
-    { label: "Terms of Use", href: "/under-construction" },
-    { label: "Privacy Policy", href: "/under-construction" },
-    { label: "Cookie Policy", href: "/under-construction" },
-    { label: "License Agreement", href: "/under-construction" },
+    { label: t("footer.terms"), href: "/under-construction" },
+    { label: t("footer.privacy"), href: "/under-construction" },
+    { label: t("footer.cookie"), href: "/under-construction" },
+    { label: t("footer.license"), href: "/under-construction" },
   ];
 
   return (
@@ -29,9 +32,7 @@ const Footer = () => {
       <div className="container mx-auto px-4 py-12">
         <div className="mb-8">
           <div className="text-4xl font-black text-primary">BAZINGA</div>
-          <p className="text-xs text-muted-foreground mt-1 max-w-md">
-            One shelf for the comic and the show it inspired.
-          </p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-md">{t("footer.tagline")}</p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
@@ -47,7 +48,7 @@ const Footer = () => {
         </div>
 
         <div className="mb-10">
-          <h3 className="text-sm font-bold mb-4">FOLLOW BAZINGA</h3>
+          <h3 className="text-sm font-bold mb-4">{t("footer.follow")}</h3>
           <div className="flex gap-3">
             {socialLinks.map((social) => (
               <Link

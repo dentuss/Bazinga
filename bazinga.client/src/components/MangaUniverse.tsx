@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import MangaModal from "@/components/MangaModal";
 import MediaCard from "@/components/MediaCard";
 import Rail from "@/components/Rail";
@@ -14,13 +15,12 @@ import {
 import { cn } from "@/lib/utils";
 
 interface MangaUniverseProps {
-  /** "home" = 18-card preview with "See all" link, no pagination/chips. */
   mode?: "home" | "full";
   viewAllHref?: string;
 }
 
-const FULL_PAGE_SIZE = 18; // three rows × six cards on lg+
-const HOME_LIMIT = 20; // rail length on the home preview
+const FULL_PAGE_SIZE = 18;
+const HOME_LIMIT = 20;
 
 const MangaCard = ({
   manga,
@@ -39,18 +39,41 @@ const MangaCard = ({
 );
 
 const MangaUniverse = ({ mode = "full", viewAllHref }: MangaUniverseProps = {}) => {
-  const [searchParams] = useSearchParams();
+  const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const masterQuery = (searchParams.get("q") ?? "").trim();
   const [selected, setSelected] = useState<MangaDto | null>(null);
   const [activeGenre, setActiveGenre] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const isHome = mode === "home";
 
+  // Local search input — mirrors AllComics so each catalog has its own
+  // page-level search box. It stays in sync with the ?q URL param so global
+  // search → catalogue still works.
+  const [localQuery, setLocalQuery] = useState(masterQuery);
+  const [debounced, setDebounced] = useState(masterQuery);
+  useEffect(() => {
+    setLocalQuery(masterQuery);
+    setDebounced(masterQuery);
+  }, [masterQuery]);
+  useEffect(() => {
+    if (isHome) return;
+    const id = setTimeout(() => {
+      const trimmed = localQuery.trim();
+      setDebounced(trimmed);
+      const next = new URLSearchParams(searchParams);
+      if (trimmed) next.set("q", trimmed);
+      else next.delete("q");
+      setSearchParams(next, { replace: true });
+    }, 300);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localQuery, isHome]);
+
   useEffect(() => {
     setPage(1);
-  }, [activeGenre, masterQuery]);
+  }, [activeGenre, debounced]);
 
-  // Deep-link: ?openManga=<id> pops the modal as if the card was clicked.
   const openMangaId = searchParams.get("openManga");
   useEffect(() => {
     if (!openMangaId || selected) return;
@@ -68,12 +91,18 @@ const MangaUniverse = ({ mode = "full", viewAllHref }: MangaUniverseProps = {}) 
   });
 
   const list = useQuery({
-    queryKey: ["manga-grid", isHome ? "home" : "full", activeGenre ?? "all", masterQuery || "", isHome ? 1 : page],
+    queryKey: [
+      "manga-grid",
+      isHome ? "home" : "full",
+      activeGenre ?? "all",
+      debounced || "",
+      isHome ? 1 : page,
+    ],
     queryFn: () =>
       searchManga({
-        q: !isHome && masterQuery.length > 1 ? masterQuery : undefined,
+        q: !isHome && debounced.length > 1 ? debounced : undefined,
         genre: !isHome ? activeGenre ?? undefined : undefined,
-        orderBy: isHome || !masterQuery ? "score" : undefined,
+        orderBy: isHome || !debounced ? "score" : undefined,
         page: isHome ? 1 : page,
         limit: isHome ? HOME_LIMIT : FULL_PAGE_SIZE,
       }),
@@ -97,7 +126,6 @@ const MangaUniverse = ({ mode = "full", viewAllHref }: MangaUniverseProps = {}) 
       "Sports",
       "Horror",
     ];
-    // Dedupe by lowercase name — Jikan can return overlapping themes/genres.
     const byName = new Map<string, (typeof genreData)[number]>();
     for (const g of genreData) {
       const key = g.name.toLowerCase();
@@ -111,19 +139,17 @@ const MangaUniverse = ({ mode = "full", viewAllHref }: MangaUniverseProps = {}) 
   const items = list.data?.data ?? [];
   const pagination = list.data?.pagination;
 
-  // Home preview = single horizontal rail with arrow buttons (no chips, no
-  // pager). Full = the discovery page (chips + paginated grid).
   if (isHome) {
     return (
       <>
         <Rail
           id="manga-rail"
-          title="MANGA"
+          title={t("manga.mangaUniverse").toUpperCase()}
           viewAllHref={viewAllHref}
           rows={2}
           loading={list.isLoading}
           empty={items.length === 0}
-          emptyMessage="No manga to show yet."
+          emptyMessage={t("manga.noneFound")}
         >
           {items.map((m) => (
             <MediaCard
@@ -144,26 +170,30 @@ const MangaUniverse = ({ mode = "full", viewAllHref }: MangaUniverseProps = {}) 
 
   return (
     <section id="manga" className="container mx-auto px-4 md:px-8 py-12 md:py-16">
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs md:text-sm font-bold uppercase tracking-[0.3em] text-primary">
-            Discover
+            {t("manga.discover")}
           </p>
           <h2 className="text-2xl md:text-4xl font-black tracking-tight mt-2">
-            Manga Universe
+            {t("manga.mangaUniverse")}
           </h2>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            {masterQuery
-              ? `Manga matching "${masterQuery}", sourced live from MyAnimeList.`
-              : "Covers, scores, synopsis. Sourced live from MyAnimeList."}
-          </p>
+        </div>
+        <div className="relative w-full md:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            value={localQuery}
+            onChange={(e) => setLocalQuery(e.target.value)}
+            placeholder={t("manga.searchPlaceholder")}
+            className="w-full h-10 rounded-md bg-card border border-border pl-9 pr-3 text-sm outline-none focus:border-primary"
+          />
         </div>
       </div>
 
       {curatedGenres.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-6">
           <GenreChip
-            label="Top picks"
+            label={t("manga.topPicks")}
             active={activeGenre === null}
             onClick={() => setActiveGenre(null)}
           />
@@ -182,11 +212,11 @@ const MangaUniverse = ({ mode = "full", viewAllHref }: MangaUniverseProps = {}) 
         {list.isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-16">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading manga…
+            {t("manga.loading")}
           </div>
         ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground py-16 text-center">
-            No manga match — try a different filter or search term.
+            {t("manga.noneFound")}
           </p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4">
@@ -199,7 +229,7 @@ const MangaUniverse = ({ mode = "full", viewAllHref }: MangaUniverseProps = {}) 
         {list.isFetching && !list.isLoading && (
           <div className="absolute top-0 right-0 text-xs text-muted-foreground flex items-center gap-1.5">
             <Loader2 className="h-3 w-3 animate-spin" />
-            Updating…
+            {t("manga.updating")}
           </div>
         )}
       </div>
@@ -211,18 +241,19 @@ const MangaUniverse = ({ mode = "full", viewAllHref }: MangaUniverseProps = {}) 
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             direction="prev"
           >
-            Previous
+            {t("comics.previous")}
           </PagerButton>
           <span className="text-sm text-muted-foreground">
-            Page <strong className="text-foreground">{pagination.currentPage}</strong> of{" "}
-            {pagination.lastVisiblePage}
+            {t("comics.page")}{" "}
+            <strong className="text-foreground">{pagination.currentPage}</strong>{" "}
+            {t("comics.of")} {pagination.lastVisiblePage}
           </span>
           <PagerButton
             disabled={!pagination.hasNextPage}
             onClick={() => setPage((p) => p + 1)}
             direction="next"
           >
-            Next
+            {t("comics.next")}
           </PagerButton>
         </div>
       )}

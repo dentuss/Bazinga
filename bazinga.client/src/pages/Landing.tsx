@@ -1,79 +1,63 @@
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, Loader2, Play, Bookmark, Smartphone, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { checkSignupEmail } from "@/lib/signup";
+import LanguagePicker from "@/components/LanguagePicker";
+import { fetchComicsMeta } from "@/lib/metadata";
 import heroBanner from "@/assets/hero-banner-1.jpg";
-import comic1 from "@/assets/comic-1.jpg";
-import comic2 from "@/assets/comic-2.jpg";
-import comic3 from "@/assets/comic-3.jpg";
-import comic4 from "@/assets/comic-4.jpg";
-import comic5 from "@/assets/comic-5.jpg";
-import comic6 from "@/assets/comic-6.jpg";
-import comic7 from "@/assets/comic-7.jpg";
-import comic8 from "@/assets/comic-8.jpg";
-
-const trending = [
-  { image: comic1, title: "Heroes of Bazinga" },
-  { image: comic2, title: "Cosmic Showdown" },
-  { image: comic3, title: "Shadow Legion" },
-  { image: comic4, title: "Neon Knights" },
-  { image: comic5, title: "Eternal Sentinels" },
-  { image: comic6, title: "Rogue Galaxy" },
-  { image: comic7, title: "Dark Horizon" },
-  { image: comic8, title: "Crimson Empire" },
-];
-
-const reasons = [
-  {
-    icon: Play,
-    title: "Stream on any screen",
-    description: "Watch shows and anime on your TV, laptop, tablet or phone.",
-  },
-  {
-    icon: Bookmark,
-    title: "Endless comics catalog",
-    description: "Thousands of issues at your fingertips. New drops every week.",
-  },
-  {
-    icon: Download,
-    title: "Download to enjoy offline",
-    description: "Save comics and episodes for plane rides, commutes and beyond.",
-  },
-  {
-    icon: Smartphone,
-    title: "One subscription, two universes",
-    description: "Comics and BazingaTV under a single Bazinga account.",
-  },
-];
-
-const faqs = [
-  {
-    q: "What is Bazinga?",
-    a: "Bazinga is a streaming home for comics and original shows. Read thousands of digital comics and watch animated adaptations, live action series and anime — all from one account.",
-  },
-  {
-    q: "How much does Bazinga cost?",
-    a: "Browse our catalog for free. Bazinga Premium starts at $4.99/month with discounts on physical and digital comics. Bazinga Unlimited at $14.99/month unlocks unlimited digital reading and BazingaTV.",
-  },
-  {
-    q: "Where can I read and watch?",
-    a: "Read comics and watch BazingaTV on the web, on iOS and Android, and on supported smart TVs. Pick up exactly where you left off across devices.",
-  },
-  {
-    q: "Can I cancel anytime?",
-    a: "Yes. There are no contracts and no cancellation fees. Cancel your subscription with two clicks from your account settings.",
-  },
-];
 
 const Landing = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [checkingEmail, setCheckingEmail] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const heroFormRef = useRef<HTMLFormElement | null>(null);
+
+  // Real metadata for the Trending shelf — Open Library comics covers. The
+  // shelf used to be 8 hand-rolled placeholders; now it's the same live source
+  // the homepage uses so signed-out visitors see real titles.
+  const trendingQuery = useQuery({
+    queryKey: ["landing-trending"],
+    queryFn: () => fetchComicsMeta({ page: 1, limit: 8 }),
+    staleTime: 60 * 60 * 1000,
+  });
+  const trending = trendingQuery.data?.data ?? [];
+
+  const reasons = [
+    {
+      icon: Play,
+      title: t("landing.reason1Title"),
+      description: t("landing.reason1Desc"),
+    },
+    {
+      icon: Bookmark,
+      title: t("landing.reason2Title"),
+      description: t("landing.reason2Desc"),
+    },
+    {
+      icon: Download,
+      title: t("landing.reason3Title"),
+      description: t("landing.reason3Desc"),
+    },
+    {
+      icon: Smartphone,
+      title: t("landing.reason4Title"),
+      description: t("landing.reason4Desc"),
+    },
+  ];
+
+  const faqs = [
+    { q: t("landing.faqQ1"), a: t("landing.faqA1") },
+    { q: t("landing.faqQ2"), a: t("landing.faqA2") },
+    { q: t("landing.faqQ3"), a: t("landing.faqA3") },
+    { q: t("landing.faqQ4"), a: t("landing.faqA4") },
+  ];
 
   const handleSignupStart = async (email: string) => {
     const trimmed = email.trim();
@@ -118,9 +102,10 @@ const Landing = () => {
               BAZINGA
             </Link>
             <div className="flex items-center gap-3">
+              <LanguagePicker variant="outline" />
               <Link to="/auth?mode=signin">
                 <Button variant="default" size="lg" className="font-bold">
-                  Sign In
+                  {t("header.signIn")}
                 </Button>
               </Link>
             </div>
@@ -130,13 +115,13 @@ const Landing = () => {
         {/* Hero content */}
         <div className="relative z-10 container mx-auto px-4 pt-20 pb-32 md:pt-32 md:pb-48 text-center">
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-black tracking-tight max-w-4xl mx-auto leading-tight">
-            Unlimited comics, shows and more.
+            {t("landing.heroTitle")}
           </h1>
           <p className="mt-6 text-xl md:text-2xl text-foreground/90 max-w-2xl mx-auto">
-            Read. Watch. Belong to the Bazinga universe.
+            {t("landing.heroSubtitle")}
           </p>
           <p className="mt-4 text-base md:text-lg text-muted-foreground">
-            Ready to dive in? Create an account or sign in to get started.
+            {t("landing.heroCta")}
           </p>
           <form
             ref={heroFormRef}
@@ -151,7 +136,7 @@ const Landing = () => {
               type="email"
               name="email"
               required
-              placeholder="Email address"
+              placeholder={t("landing.emailPlaceholder")}
               className="h-14 text-base bg-background/70 border-border/80 backdrop-blur"
               disabled={checkingEmail}
             />
@@ -165,10 +150,10 @@ const Landing = () => {
               {checkingEmail ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Checking…
+                  {t("landing.checking")}
                 </>
               ) : (
-                "Get Started"
+                t("landing.getStarted")
               )}
             </Button>
           </form>
@@ -181,27 +166,45 @@ const Landing = () => {
       {/* Trending */}
       <section className="py-16 md:py-20 border-t border-border/60">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl md:text-4xl font-black mb-8">Trending now</h2>
+          <h2 className="text-3xl md:text-4xl font-black mb-8">{t("landing.trendingTitle")}</h2>
           <div className="relative">
-            <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-thin">
-              {trending.map((item, idx) => (
-                <div
-                  key={item.title}
-                  className="relative shrink-0 w-44 md:w-52 snap-start group cursor-pointer"
-                >
-                  <div className="absolute -left-3 top-2 text-7xl md:text-8xl font-black text-primary/80 leading-none select-none pointer-events-none">
-                    {idx + 1}
-                  </div>
-                  <div className="relative ml-10 overflow-hidden rounded-md shadow-xl transition-transform duration-300 group-hover:-translate-y-1">
-                    <img src={item.image} alt={item.title} className="w-full aspect-[2/3] object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                    <div className="absolute bottom-2 left-2 right-2 text-xs font-bold uppercase tracking-wide text-white">
-                      {item.title}
+            {trendingQuery.isLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {t("comics.loading", { defaultValue: "Loading…" })}
+              </div>
+            ) : (
+              <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-thin">
+                {trending.map((item, idx) => (
+                  <div
+                    key={item.id}
+                    className="relative shrink-0 w-44 md:w-52 snap-start group cursor-pointer"
+                  >
+                    <div className="absolute -left-3 top-2 text-7xl md:text-8xl font-black text-primary/80 leading-none select-none pointer-events-none">
+                      {idx + 1}
+                    </div>
+                    <div className="relative ml-10 overflow-hidden rounded-md shadow-xl transition-transform duration-300 group-hover:-translate-y-1">
+                      <div
+                        aria-hidden
+                        className="absolute inset-0 bg-gradient-to-br from-primary/40 via-primary/15 to-orange-500/30"
+                      />
+                      <img
+                        src={item.image ?? item.thumbnail ?? ""}
+                        alt={item.title}
+                        className="w-full aspect-[2/3] object-cover relative"
+                        onError={(e) =>
+                          ((e.currentTarget as HTMLImageElement).style.opacity = "0")
+                        }
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                      <div className="absolute bottom-2 left-2 right-2 text-xs font-bold uppercase tracking-wide text-white">
+                        {item.title}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -209,7 +212,7 @@ const Landing = () => {
       {/* Reasons to join */}
       <section className="py-16 md:py-20 border-t border-border/60 bg-card/40">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl md:text-4xl font-black mb-10">More reasons to join</h2>
+          <h2 className="text-3xl md:text-4xl font-black mb-10">{t("landing.reasonsTitle")}</h2>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {reasons.map((r) => (
               <div
@@ -228,7 +231,7 @@ const Landing = () => {
       {/* FAQ */}
       <section className="py-16 md:py-20 border-t border-border/60">
         <div className="container mx-auto px-4 max-w-3xl">
-          <h2 className="text-3xl md:text-4xl font-black mb-10 text-center">Frequently asked questions</h2>
+          <h2 className="text-3xl md:text-4xl font-black mb-10 text-center">{t("landing.faqTitle")}</h2>
           <div className="space-y-2">
             {faqs.map((f, idx) => (
               <div key={f.q} className="border border-border/60 bg-card rounded-md overflow-hidden">
@@ -254,7 +257,7 @@ const Landing = () => {
           </div>
 
           <div className="mt-12 text-center">
-            <p className="text-lg text-muted-foreground mb-4">Ready to join the Bazinga universe?</p>
+            <p className="text-lg text-muted-foreground mb-4">{t("landing.joinPrompt")}</p>
             <Button
               variant="hero"
               size="lg"
@@ -265,7 +268,7 @@ const Landing = () => {
                 input?.focus();
               }}
             >
-              Get Started
+              {t("landing.getStarted")}
             </Button>
           </div>
         </div>
@@ -274,7 +277,7 @@ const Landing = () => {
       {/* Footer */}
       <footer className="border-t border-border/60 py-10">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>©2025 BAZINGA. All rights reserved.</p>
+          <p>{t("landing.footerCopy")}</p>
         </div>
       </footer>
     </div>

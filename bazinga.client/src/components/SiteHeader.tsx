@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import MasterSearch from "@/components/MasterSearch";
+import LanguagePicker from "@/components/LanguagePicker";
 import {
   Check,
   HelpCircle,
@@ -33,7 +35,10 @@ import { MAX_PROFILES_PER_ACCOUNT } from "@/lib/profiles";
 export type HeaderTone = "default" | "red" | "orange";
 
 export type SiteHeaderNavItem = {
+  /** Fallback display label when no labelKey is provided. */
   label: string;
+  /** i18n key used to look up the localized label. */
+  labelKey?: string;
   to?: string;
   href?: string;
   tone?: HeaderTone;
@@ -67,6 +72,7 @@ const SiteHeader = ({
 }: SiteHeaderProps) => {
   const { user, profiles, currentProfile, hasPaidSubscription, selectProfile, logout } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -140,16 +146,17 @@ const SiteHeader = ({
   const renderItem = (item: SiteHeaderNavItem, mobile = false) => {
     const cls = itemClass(item, mobile);
     const onClick = mobile ? () => setMobileOpen(false) : undefined;
+    const label = item.labelKey ? t(item.labelKey) : item.label;
     if (item.href) {
       return (
         <a key={item.label} href={item.href} onClick={onClick} className={cls}>
-          {item.label}
+          {label}
         </a>
       );
     }
     return (
       <Link key={item.label} to={item.to ?? "#"} onClick={onClick} className={cls}>
-        {item.label}
+        {label}
       </Link>
     );
   };
@@ -189,17 +196,18 @@ const SiteHeader = ({
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Search"
+            aria-label={t("header.search")}
             className="hidden sm:flex"
             onClick={() => setSearchOpen(true)}
           >
             <Search className="h-5 w-5" />
           </Button>
+          <LanguagePicker />
           {!hasPaidSubscription && (
             <Link to="/bazinga-unlimited" className="hidden sm:block">
               <Button className="bg-gradient-to-r from-primary via-primary to-orange-500 hover:opacity-90 text-white font-bold uppercase tracking-wider shadow-lg shadow-[hsl(var(--shadow-glow))] border-0">
                 <Sparkles className="h-4 w-4" />
-                Join Now
+                {t("header.joinNow")}
               </Button>
             </Link>
           )}
@@ -247,7 +255,11 @@ const SiteHeader = ({
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold truncate">{profile.name}</p>
                             <p className="text-[11px] text-muted-foreground truncate">
-                              {profile.isRoot ? "Main profile" : profile.isKids ? "Kids" : "Sub-profile"}
+                              {profile.isRoot
+                                ? t("header.mainProfile")
+                                : profile.isKids
+                                  ? t("header.kids")
+                                  : t("header.subProfile")}
                             </p>
                           </div>
                           {profile.id === currentProfile?.id && (
@@ -269,7 +281,7 @@ const SiteHeader = ({
                       <div className="h-9 w-9 rounded-md border border-dashed border-muted-foreground/60 grid place-items-center text-muted-foreground">
                         <Plus className="h-4 w-4" />
                       </div>
-                      <span className="text-sm font-semibold">Add Profile</span>
+                      <span className="text-sm font-semibold">{t("header.addProfile")}</span>
                     </DropdownMenuItem>
                   </>
                 )}
@@ -281,7 +293,7 @@ const SiteHeader = ({
                     className="gap-3 cursor-pointer"
                   >
                     <Pencil className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Manage Profiles</span>
+                    <span className="text-sm">{t("header.manageProfiles")}</span>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem
@@ -289,37 +301,37 @@ const SiteHeader = ({
                   className="gap-3 cursor-pointer"
                 >
                   <Users className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Switch Profile</span>
+                  <span className="text-sm">{t("header.switchProfile")}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onSelect={() => navigate("/profile")}
                   className="gap-3 cursor-pointer"
                 >
                   <Settings className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Account</span>
+                  <span className="text-sm">{t("header.account")}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onSelect={() => navigate("/under-construction")}
                   className="gap-3 cursor-pointer"
                 >
                   <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Help center</span>
+                  <span className="text-sm">{t("header.helpCenter")}</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onSelect={handleSignOut}
-                  className="gap-3 cursor-pointer text-destructive focus:text-destructive"
+                  className="gap-3 cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive"
                 >
                   <LogOut className="h-4 w-4" />
-                  <span className="text-sm">Sign out of Bazinga</span>
+                  <span className="text-sm">{t("header.signOut")}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
             <Link to="/auth">
               <Button variant="ghost" className="hidden md:flex font-semibold">
-                Sign In
+                {t("header.signIn")}
               </Button>
             </Link>
           )}
@@ -329,7 +341,7 @@ const SiteHeader = ({
             size="icon"
             className="lg:hidden"
             onClick={() => setMobileOpen(true)}
-            aria-label="Open menu"
+            aria-label={t("header.menu")}
           >
             <Menu className="h-5 w-5" />
           </Button>
@@ -344,12 +356,12 @@ const SiteHeader = ({
           />
           <div className="absolute right-0 top-0 h-screen min-h-[100dvh] w-[85%] max-w-xs bg-background shadow-xl flex flex-col">
             <div className="flex items-center justify-between border-b border-border px-4 py-4">
-              <span className="text-lg font-bold">Menu</span>
+              <span className="text-lg font-bold">{t("header.menu")}</span>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setMobileOpen(false)}
-                aria-label="Close menu"
+                aria-label={t("modal.close")}
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -361,6 +373,12 @@ const SiteHeader = ({
                 ))}
               </ul>
               <div className="mt-6 flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t("language.label")}
+                  </span>
+                  <LanguagePicker variant="outline" />
+                </div>
                 {!hasPaidSubscription && (
                   <Button
                     onClick={() => {
@@ -370,7 +388,7 @@ const SiteHeader = ({
                     className="w-full bg-gradient-to-r from-primary via-primary to-orange-500 text-white font-bold uppercase tracking-wider border-0"
                   >
                     <Sparkles className="h-4 w-4" />
-                    Join Now
+                    {t("header.joinNow")}
                   </Button>
                 )}
                 {user ? (
@@ -384,7 +402,7 @@ const SiteHeader = ({
                       }}
                     >
                       <Users className="h-4 w-4" />
-                      Switch Profile
+                      {t("header.switchProfile")}
                     </Button>
                     <Button
                       variant="outline"
@@ -395,28 +413,28 @@ const SiteHeader = ({
                       }}
                     >
                       <Settings className="h-4 w-4" />
-                      Account
+                      {t("header.account")}
                     </Button>
                     <Button
                       variant="ghost"
-                      className="w-full gap-2 text-destructive hover:text-destructive"
+                      className="w-full gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => {
                         setMobileOpen(false);
                         handleSignOut();
                       }}
                     >
                       <LogOut className="h-4 w-4" />
-                      Sign out
+                      {t("account.signOut")}
                     </Button>
                   </>
                 ) : (
                   <>
                     <Link to="/auth?mode=signin" onClick={() => setMobileOpen(false)}>
-                      <Button className="w-full">Sign In</Button>
+                      <Button className="w-full">{t("header.signIn")}</Button>
                     </Link>
                     <Link to="/" onClick={() => setMobileOpen(false)}>
                       <Button variant="outline" className="w-full">
-                        Get Started
+                        {t("header.getStarted")}
                       </Button>
                     </Link>
                   </>
