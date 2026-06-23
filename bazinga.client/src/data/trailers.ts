@@ -1,3 +1,5 @@
+import { BERSERK_EP1_SRC } from "@/data/episodeCatalogue";
+
 export type Trailer = {
   id: string;
   title: string;
@@ -17,10 +19,13 @@ export const trailers: Trailer[] = [
     tagline: "Brand of sacrifice.",
     description:
       "Branded for death, Guts swings his impossibly large blade against demons, fate and his own past. A dark fantasy saga adapted from Kentaro Miura's manga.",
-    src: "/trailers/berserk.mp4",
+    // No standalone Berserk trailer ships — the hero reel streams a clipped
+    // window of the real episode 1 instead. Play still routes to the full
+    // episode list via the curated catalogue.
+    src: BERSERK_EP1_SRC,
     badges: ["EPIC SAGA", "ANIME UNIVERSE"],
     genres: ["Anime", "Dark Fantasy", "Action"],
-    year: 2016,
+    year: 1997,
     rating: "TV-MA",
   },
   {
