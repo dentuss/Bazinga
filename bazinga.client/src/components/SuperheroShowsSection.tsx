@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Loader2, Play, Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Check, ChevronLeft, ChevronRight, Loader2, Play, Plus } from "lucide-react";
 import ShowModal from "@/components/ShowModal";
 import {
   fetchSuperheroShows,
@@ -9,6 +10,9 @@ import {
   showSubtitle,
   type SuperheroShowDto,
 } from "@/lib/metadata";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCollections } from "@/contexts/CollectionsContext";
+import { cn } from "@/lib/utils";
 
 const RAIL_ID = "superhero-shows-rail";
 
@@ -19,6 +23,7 @@ const scrollRail = (dir: -1 | 1) => () => {
 };
 
 const SuperheroShowsSection = () => {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<SuperheroShowDto | null>(null);
   const { data = [], isLoading } = useQuery({
     queryKey: ["superhero-shows"],
@@ -39,7 +44,7 @@ const SuperheroShowsSection = () => {
           to="/bazinga-tv/series"
           className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-widest text-orange-500 hover:text-orange-400 transition-colors"
         >
-          Explore all
+          {t("tvHome.exploreAll")}
           <ChevronRight className="h-3.5 w-3.5" />
         </Link>
       </div>
@@ -68,12 +73,10 @@ const SuperheroShowsSection = () => {
           {isLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground px-4">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading superhero shows…
+              {t("series.loading")}
             </div>
           ) : data.length === 0 ? (
-            <p className="px-4 text-sm text-muted-foreground">
-              No superhero shows available right now.
-            </p>
+            <p className="px-4 text-sm text-muted-foreground">{t("series.noneFound")}</p>
           ) : (
             data.map((show) => <ShowCard key={show.id} show={show} onSelect={setSelected} />)
           )}
@@ -90,54 +93,98 @@ const ShowCard = ({
 }: {
   show: SuperheroShowDto;
   onSelect: (s: SuperheroShowDto) => void;
-}) => (
-  <div className="relative shrink-0 w-40 md:w-52 snap-start" style={{ aspectRatio: "2 / 3" }}>
-    <button
-      type="button"
-      onClick={() => onSelect(show)}
-      className="group/card absolute inset-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-md transition-all duration-300 ease-out hover:scale-[1.15] hover:z-30 origin-center"
-    >
-      <div className="relative h-full rounded-md overflow-hidden bg-card shadow-lg group-hover/card:shadow-2xl group-hover/card:shadow-orange-500/30 ring-0 group-hover/card:ring-2 group-hover/card:ring-orange-500/60 transition-shadow">
-        {show.imageMedium || show.imageOriginal ? (
-          <img
-            src={show.imageMedium ?? show.imageOriginal!}
-            alt={show.name}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-500"
-          />
-        ) : (
-          <div className="h-full w-full bg-gradient-to-br from-primary/30 to-orange-500/30 grid place-items-center text-2xl font-black text-white/80 p-3 text-center">
-            {show.name}
+}) => {
+  const navigate = useNavigate();
+  const { token } = useAuth();
+  const { isSaved, toggle } = useCollections();
+  const { t } = useTranslation();
+  const saved = isSaved("mylist", "show", String(show.id));
+
+  // Hover actions live ON TOP of the card-wide click handler — stopPropagation
+  // is critical so a Play / Add tap doesn't also open the detail modal.
+  const handlePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/bazinga-tv/watch/show-${show.id}`);
+  };
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!token) return;
+    void toggle("mylist", {
+      kind: "show",
+      contentId: String(show.id),
+      title: show.name,
+      image: show.imageMedium ?? show.imageOriginal ?? null,
+      subtitle: showMetaLine(show) || show.genres.slice(0, 3).join(" · "),
+      payload: show,
+    });
+  };
+
+  return (
+    <div className="relative shrink-0 w-40 md:w-52 snap-start" style={{ aspectRatio: "2 / 3" }}>
+      <button
+        type="button"
+        onClick={() => onSelect(show)}
+        className="group/card absolute inset-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-md transition-all duration-300 ease-out hover:scale-[1.15] hover:z-30 origin-center"
+      >
+        <div className="relative h-full rounded-md overflow-hidden bg-card shadow-lg group-hover/card:shadow-2xl group-hover/card:shadow-orange-500/30 ring-0 group-hover/card:ring-2 group-hover/card:ring-orange-500/60 transition-shadow">
+          {show.imageMedium || show.imageOriginal ? (
+            <img
+              src={show.imageMedium ?? show.imageOriginal!}
+              alt={show.name}
+              loading="lazy"
+              className="h-full w-full object-cover transition-transform duration-500"
+            />
+          ) : (
+            <div className="h-full w-full bg-gradient-to-br from-primary/30 to-orange-500/30 grid place-items-center text-2xl font-black text-white/80 p-3 text-center">
+              {show.name}
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent" />
+          <div className="absolute bottom-2 left-2 right-2 transition-opacity duration-200 group-hover/card:opacity-0">
+            <p className="text-sm md:text-base font-bold text-white drop-shadow line-clamp-2">
+              {show.name}
+            </p>
+            <p className="text-[10px] md:text-xs text-white/70 uppercase tracking-wider">
+              {showSubtitle(show)}
+            </p>
           </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent" />
-        <div className="absolute bottom-2 left-2 right-2 transition-opacity duration-200 group-hover/card:opacity-0">
-          <p className="text-sm md:text-base font-bold text-white drop-shadow line-clamp-2">
-            {show.name}
-          </p>
-          <p className="text-[10px] md:text-xs text-white/70 uppercase tracking-wider">
-            {showSubtitle(show)}
-          </p>
-        </div>
-        <div className="absolute inset-x-0 bottom-0 p-3 opacity-0 translate-y-2 group-hover/card:opacity-100 group-hover/card:translate-y-0 transition-all duration-300 bg-gradient-to-t from-black via-black/90 to-transparent">
-          <p className="text-sm md:text-base font-bold text-white drop-shadow line-clamp-2 mb-2">
-            {show.name}
-          </p>
-          <div className="flex items-center gap-1.5 mb-2">
-            <span className="grid place-items-center h-7 w-7 rounded-full bg-white text-black">
-              <Play className="h-3.5 w-3.5 fill-current" />
-            </span>
-            <span className="grid place-items-center h-7 w-7 rounded-full border border-white/40 text-white">
-              <Plus className="h-3.5 w-3.5" />
-            </span>
+          <div className="absolute inset-x-0 bottom-0 p-3 opacity-0 translate-y-2 group-hover/card:opacity-100 group-hover/card:translate-y-0 transition-all duration-300 bg-gradient-to-t from-black via-black/90 to-transparent">
+            <p className="text-sm md:text-base font-bold text-white drop-shadow line-clamp-2 mb-2">
+              {show.name}
+            </p>
+            <div className="flex items-center gap-1.5 mb-2">
+              <button
+                type="button"
+                onClick={handlePlay}
+                aria-label={t("modal.play")}
+                className="grid place-items-center h-7 w-7 rounded-full bg-white text-black hover:bg-white/85 cursor-pointer"
+              >
+                <Play className="h-3.5 w-3.5 fill-current" />
+              </button>
+              {token && (
+                <button
+                  type="button"
+                  onClick={handleToggle}
+                  aria-label={saved ? t("modal.inMyList") : t("modal.myList")}
+                  className={cn(
+                    "grid place-items-center h-7 w-7 rounded-full border cursor-pointer transition-colors",
+                    saved
+                      ? "border-orange-500 bg-orange-500/30 text-orange-300 hover:bg-orange-500/40"
+                      : "border-white/40 text-white hover:border-white"
+                  )}
+                >
+                  {saved ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] md:text-xs text-white/80 line-clamp-1">
+              {showMetaLine(show) || show.genres.slice(0, 3).join(" · ")}
+            </p>
           </div>
-          <p className="text-[10px] md:text-xs text-white/80 line-clamp-1">
-            {showMetaLine(show) || show.genres.slice(0, 3).join(" · ")}
-          </p>
         </div>
-      </div>
-    </button>
-  </div>
-);
+      </button>
+    </div>
+  );
+};
 
 export default SuperheroShowsSection;

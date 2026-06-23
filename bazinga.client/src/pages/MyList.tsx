@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import TVHeader from "@/components/TVHeader";
 import CollectionView from "@/components/CollectionView";
 import AnimeModal from "@/components/AnimeModal";
@@ -38,6 +39,7 @@ const showFromItem = (item: CollectionItem): SuperheroShowDto => {
 const MyList = () => {
   const { token, currentProfile } = useAuth();
   const { myList } = useCollections();
+  const { t } = useTranslation();
   const [openAnime, setOpenAnime] = useState<AnimeDto | null>(null);
   const [openShow, setOpenShow] = useState<SuperheroShowDto | null>(null);
 
@@ -52,9 +54,9 @@ const MyList = () => {
       <main>
         {!token ? (
           <div className="container mx-auto px-4 py-24 text-center space-y-4">
-            <p className="text-muted-foreground">Sign in to view your list.</p>
+            <p className="text-muted-foreground">{t("myList.signInPrompt")}</p>
             <Link to="/auth">
-              <Button size="lg">Sign in</Button>
+              <Button size="lg">{t("myList.signIn")}</Button>
             </Link>
           </div>
         ) : (
@@ -62,13 +64,17 @@ const MyList = () => {
             collection="mylist"
             items={myList}
             accent="orange"
-            title={`${currentProfile?.name ?? "Your"} List`}
-            subtitle="Anime and series you've saved. Each profile keeps its own list — add titles with the + My List button on any show."
-            emptyMessage="Your list is empty. Tap '+ My List' on any anime or series to add it here."
+            title={
+              currentProfile?.name
+                ? t("myList.nameList", { name: currentProfile.name })
+                : t("myList.yourList")
+            }
+            subtitle={t("myList.subtitle")}
+            emptyMessage={t("myList.empty")}
             tabs={[
-              { value: "all", label: "All" },
-              { value: "anime", label: "Anime" },
-              { value: "show", label: "Series" },
+              { value: "all", label: t("myList.tabAll") },
+              { value: "anime", label: t("myList.tabAnime") },
+              { value: "show", label: t("myList.tabSeries") },
             ]}
             onOpen={handleOpen}
           />

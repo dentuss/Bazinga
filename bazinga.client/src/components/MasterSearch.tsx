@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { ArrowRight, Loader2, Search, Sparkles, X } from "lucide-react";
 import {
   comicMetaSubtitle,
@@ -15,10 +16,6 @@ import {
   type MangaDto,
   type SuperheroDto,
 } from "@/lib/metadata";
-import {
-  placeholderComics,
-  type PlaceholderComic,
-} from "@/data/placeholderComics";
 import MangaModal from "@/components/MangaModal";
 import HeroModal from "@/components/HeroModal";
 import ComicModal from "@/components/ComicModal";
@@ -34,12 +31,12 @@ const PROMPTS = ["Berserk", "Spider-Man", "Cowboy Bebop"] as const;
 
 const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
 
   // Modals popped from the search itself — so clicking a result opens the
   // detail right here instead of bouncing to a catalog page.
-  const [openComic, setOpenComic] = useState<PlaceholderComic | null>(null);
   const [openMeta, setOpenMeta] = useState<ComicMetaDto | null>(null);
   const [openHero, setOpenHero] = useState<SuperheroDto | null>(null);
   const [openManga, setOpenManga] = useState<MangaDto | null>(null);
@@ -50,7 +47,6 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
     if (!open) {
       setQuery("");
       setDebounced("");
-      setOpenComic(null);
       setOpenMeta(null);
       setOpenHero(null);
       setOpenManga(null);
@@ -60,7 +56,6 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         // Layered close: dismiss top-most modal first, then the overlay.
-        if (openComic) return setOpenComic(null);
         if (openMeta) return setOpenMeta(null);
         if (openHero) return setOpenHero(null);
         if (openManga) return setOpenManga(null);
@@ -70,27 +65,13 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose, openComic, openMeta, openHero, openManga, openAnime]);
+  }, [open, onClose, openMeta, openHero, openManga, openAnime]);
 
   // Debounce typing.
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 250);
     return () => clearTimeout(t);
   }, [query]);
-
-  const comicMatches = useMemo<PlaceholderComic[]>(() => {
-    if (!debounced) return [];
-    const q = debounced.toLowerCase();
-    return placeholderComics
-      .filter(
-        (c) =>
-          c.title.toLowerCase().includes(q) ||
-          c.series.toLowerCase().includes(q) ||
-          c.character.toLowerCase().includes(q) ||
-          c.creators.toLowerCase().includes(q)
-      )
-      .slice(0, 5);
-  }, [debounced]);
 
   const enabled = debounced.length > 1;
 
@@ -133,7 +114,6 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
   const empty =
     enabled &&
     !totalLoading &&
-    comicMatches.length === 0 &&
     heroHits.length === 0 &&
     mangaHits.length === 0 &&
     animeHits.length === 0 &&
@@ -155,7 +135,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
       className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex flex-col overflow-hidden animate-fade-in"
       role="dialog"
       aria-modal="true"
-      aria-label="Search Bazinga"
+      aria-label={t("search.label")}
       onClick={onClose}
     >
       {/* Top strip — title + close + input. Bound by the viewport, not the page container. */}
@@ -165,13 +145,13 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
       >
         <div className="flex items-center justify-between mb-5">
           <p className="text-xs font-bold uppercase tracking-[0.4em] text-primary">
-            Search Bazinga
+            {t("search.label")}
           </p>
           <button
             type="button"
             onClick={onClose}
             className="h-9 w-9 rounded-full bg-card hover:bg-muted border border-border/60 flex items-center justify-center transition-colors"
-            aria-label="Close search"
+            aria-label={t("search.close")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -183,7 +163,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search comics, characters, manga, anime…"
+            placeholder={t("search.placeholder")}
             className="w-full h-14 md:h-16 rounded-xl bg-card border-2 border-border pl-12 pr-12 text-base md:text-lg font-semibold outline-none focus:border-primary focus:shadow-[0_0_30px_hsl(0_82%_55%/0.3)] transition-all placeholder:text-muted-foreground/70"
           />
           {query ? (
@@ -191,7 +171,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
               type="button"
               onClick={() => setQuery("")}
               className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full hover:bg-muted grid place-items-center transition-colors"
-              aria-label="Clear"
+              aria-label={t("search.close")}
             >
               <X className="h-4 w-4" />
             </button>
@@ -201,11 +181,23 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
         </div>
 
         <p className="mt-3 text-[11px] text-muted-foreground">
-          Press{" "}
-          <kbd className="px-1.5 py-0.5 rounded bg-card border border-border font-bold text-foreground">
-            Esc
-          </kbd>{" "}
-          to close
+          {t("search.closeShortcut", {
+            kbd: "Esc",
+            replace: { kbd: "Esc" },
+          })
+            .split("Esc")
+            .map((part, i) =>
+              i === 0 ? (
+                <span key={i}>{part}</span>
+              ) : (
+                <span key={i}>
+                  <kbd className="px-1.5 py-0.5 rounded bg-card border border-border font-bold text-foreground">
+                    Esc
+                  </kbd>
+                  {part}
+                </span>
+              )
+            )}
         </p>
       </div>
 
@@ -218,7 +210,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
           {!debounced && (
             <div className="pt-4">
               <p className="text-xs font-bold uppercase tracking-[0.3em] text-muted-foreground mb-3">
-                Try
+                {t("search.try")}
               </p>
               <div className="grid gap-3 sm:grid-cols-3">
                 {PROMPTS.map((p) => (
@@ -231,7 +223,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
                     <Sparkles className="h-4 w-4 text-primary shrink-0" />
                     <div className="min-w-0">
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Try
+                        {t("search.try")}
                       </p>
                       <p className="font-bold truncate group-hover:text-primary transition-colors">
                         {p}
@@ -245,32 +237,14 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
 
           {empty && (
             <p className="text-center text-muted-foreground py-16">
-              No matches for{" "}
-              <span className="font-bold text-foreground">"{debounced}"</span>.
+              {t("search.noMatches", { query: debounced })}
             </p>
           )}
 
           <div className="space-y-7 pt-2">
-            {comicMatches.length > 0 && (
-              <Section
-                title="Comics"
-                count={comicMatches.length}
-                onSeeAll={() => goToFiltered("comics")}
-              >
-                {comicMatches.map((c) => (
-                  <Result
-                    key={c.id}
-                    image={c.image}
-                    title={c.title}
-                    subtitle={`${c.series} · ${c.creators}`}
-                    onClick={() => setOpenComic(c)}
-                  />
-                ))}
-              </Section>
-            )}
             {metaHits.length > 0 && (
               <Section
-                title="Superhero Comics"
+                title={t("search.superheroComics")}
                 count={metaHits.length}
                 onSeeAll={() => goToFiltered("comics")}
               >
@@ -288,7 +262,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
             )}
             {animeHits.length > 0 && (
               <Section
-                title="Anime"
+                title={t("search.anime")}
                 count={animeHits.length}
                 tone="orange"
                 onSeeAll={() => goToFiltered("anime")}
@@ -307,7 +281,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
             )}
             {heroHits.length > 0 && (
               <Section
-                title="Characters"
+                title={t("search.characters")}
                 count={heroHits.length}
                 onSeeAll={() => goToFiltered("characters")}
               >
@@ -325,7 +299,7 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
             )}
             {mangaHits.length > 0 && (
               <Section
-                title="Manga"
+                title={t("search.manga")}
                 count={mangaHits.length}
                 onSeeAll={() => goToFiltered("manga")}
               >
@@ -350,20 +324,6 @@ const MasterSearch = ({ open, onClose }: MasterSearchProps) => {
       </div>
 
       {/* Modals — rendered above the overlay so a click opens detail in place. */}
-      {openComic && (
-        <ComicModal
-          isOpen={true}
-          onClose={() => setOpenComic(null)}
-          comic={{
-            id: openComic.id,
-            title: openComic.title,
-            image: openComic.image,
-            creators: openComic.creators,
-            description: openComic.description,
-            series: openComic.series,
-          }}
-        />
-      )}
       {openMeta && (
         <ComicModal
           isOpen={true}
@@ -404,32 +364,35 @@ const Section = ({
   onSeeAll: () => void;
   tone?: "red" | "orange";
   children: React.ReactNode;
-}) => (
-  <div>
-    <div className="flex items-center justify-between mb-3">
-      <h3
-        className={cn(
-          "text-xs font-bold uppercase tracking-[0.3em]",
-          tone === "orange" ? "text-orange-500" : "text-primary"
-        )}
-      >
-        {title} <span className="text-muted-foreground ml-1">({count})</span>
-      </h3>
-      <button
-        type="button"
-        onClick={onSeeAll}
-        className={cn(
-          "text-xs font-semibold hover:underline inline-flex items-center gap-1",
-          tone === "orange" ? "text-orange-500" : "text-primary"
-        )}
-      >
-        See all
-        <ArrowRight className="h-3 w-3" />
-      </button>
+}) => {
+  const { t } = useTranslation();
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h3
+          className={cn(
+            "text-xs font-bold uppercase tracking-[0.3em]",
+            tone === "orange" ? "text-orange-500" : "text-primary"
+          )}
+        >
+          {title} <span className="text-muted-foreground ml-1">({count})</span>
+        </h3>
+        <button
+          type="button"
+          onClick={onSeeAll}
+          className={cn(
+            "text-xs font-semibold hover:underline inline-flex items-center gap-1",
+            tone === "orange" ? "text-orange-500" : "text-primary"
+          )}
+        >
+          {t("comics.seeAll")}
+          <ArrowRight className="h-3 w-3" />
+        </button>
+      </div>
+      <div className="grid gap-2">{children}</div>
     </div>
-    <div className="grid gap-2">{children}</div>
-  </div>
-);
+  );
+};
 
 const Result = ({
   image,

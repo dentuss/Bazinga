@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Loader2, Search } from "lucide-react";
 import TVHeader from "@/components/TVHeader";
 import ShowModal from "@/components/ShowModal";
@@ -9,6 +10,7 @@ import {
   showSubtitle,
   type SuperheroShowDto,
 } from "@/lib/metadata";
+import { cn } from "@/lib/utils";
 
 const ShowGridCard = ({
   show,
@@ -52,9 +54,11 @@ const ShowGridCard = ({
 );
 
 const Series = () => {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [selected, setSelected] = useState<SuperheroShowDto | null>(null);
+  const [activeGenre, setActiveGenre] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 300);
@@ -75,11 +79,29 @@ const Series = () => {
   });
 
   const searching = debounced.length > 1;
-  const items = useMemo<SuperheroShowDto[]>(
+  const sourceItems = useMemo<SuperheroShowDto[]>(
     () => (searching ? search.data ?? [] : base.data ?? []),
     [searching, search.data, base.data]
   );
   const loading = searching ? search.isLoading : base.isLoading;
+
+  // Derive genre chips from whatever the source actually returned. Limited to
+  // the most-represented options so the bar stays scannable.
+  const genres = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of sourceItems) {
+      for (const g of s.genres) counts.set(g, (counts.get(g) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([name]) => name);
+  }, [sourceItems]);
+
+  const items = useMemo(() => {
+    if (!activeGenre) return sourceItems;
+    return sourceItems.filter((s) => s.genres.includes(activeGenre));
+  }, [sourceItems, activeGenre]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -98,22 +120,38 @@ const Series = () => {
               BazingaTV
             </p>
             <h1 className="mt-3 text-4xl md:text-6xl font-black tracking-tighter leading-[0.95]">
-              Series
+              {t("series.title")}
             </h1>
             <p className="mt-4 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
-              Live-action superhero series — sourced live from TVMaze.
+              {t("series.catalogSummary")}
             </p>
           </div>
         </section>
 
         <section className="container mx-auto px-4 md:px-8 py-8 md:py-12">
-          <div className="flex justify-end mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+            {/* Genre chips — populated from whatever the active source returned */}
+            <div className="flex flex-wrap gap-2 flex-1">
+              <GenreChip
+                label={t("series.all")}
+                active={activeGenre === null}
+                onClick={() => setActiveGenre(null)}
+              />
+              {genres.map((g) => (
+                <GenreChip
+                  key={g}
+                  label={g}
+                  active={activeGenre === g}
+                  onClick={() => setActiveGenre(activeGenre === g ? null : g)}
+                />
+              ))}
+            </div>
             <div className="relative w-full md:w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search series…"
+                placeholder={t("series.searchPlaceholder")}
                 className="w-full h-10 rounded-md bg-card border border-border pl-9 pr-3 text-sm outline-none focus:border-orange-500"
               />
             </div>
@@ -122,11 +160,13 @@ const Series = () => {
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground py-16">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading series…
+              {t("series.loading")}
             </div>
           ) : items.length === 0 ? (
             <p className="text-sm text-muted-foreground py-16 text-center">
-              {searching ? `No series match "${debounced}".` : "No series available right now."}
+              {searching
+                ? t("series.noMatches", { query: debounced })
+                : t("series.noneFound")}
             </p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4">
@@ -142,5 +182,28 @@ const Series = () => {
     </div>
   );
 };
+
+const GenreChip = ({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={cn(
+      "shrink-0 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-full border transition-all duration-200 hover:-translate-y-0.5",
+      active
+        ? "bg-orange-500 text-black border-orange-500 shadow-md shadow-orange-500/30"
+        : "bg-transparent text-foreground/80 border-border hover:border-orange-500/60 hover:text-orange-400"
+    )}
+  >
+    {label}
+  </button>
+);
 
 export default Series;

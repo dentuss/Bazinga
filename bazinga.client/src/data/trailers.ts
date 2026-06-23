@@ -12,6 +12,18 @@ export type Trailer = {
 
 export const trailers: Trailer[] = [
   {
+    id: "berserk",
+    title: "Berserk",
+    tagline: "Brand of sacrifice.",
+    description:
+      "Branded for death, Guts swings his impossibly large blade against demons, fate and his own past. A dark fantasy saga adapted from Kentaro Miura's manga.",
+    src: "/trailers/berserk.mp4",
+    badges: ["EPIC SAGA", "ANIME UNIVERSE"],
+    genres: ["Anime", "Dark Fantasy", "Action"],
+    year: 2016,
+    rating: "TV-MA",
+  },
+  {
     id: "the-boys",
     title: "The Boys",
     tagline: "The final season. No one is safe.",

@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, Info, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import TrailerModal from "@/components/TrailerModal";
 import { trailers } from "@/data/trailers";
-import heroBanner1 from "@/assets/hero-banner-1.jpg";
-import heroBanner2 from "@/assets/hero-banner-2.jpg";
-import heroBanner3 from "@/assets/hero-banner-3.jpg";
-
-const posters = [heroBanner1, heroBanner2, heroBanner3];
 
 const MIN_CLIP_SECONDS = 10;
 const MAX_CLIP_SECONDS = 15;
 
 const TVHero = () => {
+  const navigate = useNavigate();
+  const { t } = useTranslation();
   const [index, setIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -66,14 +65,16 @@ const TVHero = () => {
   }, [modalOpen]);
 
   return (
-    <section className="relative h-[80vh] min-h-[560px] -mt-16 overflow-hidden">
-      {/* Background reel (key forces a fresh clip + crossfade per slide) */}
-      <div key={current.id} className="absolute inset-0 animate-fade-in">
+    <section className="relative h-[80vh] min-h-[560px] -mt-16 overflow-hidden bg-black">
+      {/* Background reel (key forces a fresh clip + crossfade per slide).
+         Black backdrop while the next clip loads — previously a comic-art
+         poster bled through for ~2s and made the page feel like a Comics
+         hand-off. */}
+      <div key={current.id} className="absolute inset-0 animate-fade-in bg-black">
         <video
           ref={videoRef}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-cover bg-black"
           src={current.src}
-          poster={posters[index % posters.length]}
           autoPlay
           muted
           playsInline
@@ -84,7 +85,7 @@ const TVHero = () => {
         />
       </div>
 
-      {/* Cinematic overlays */}
+      {/* Cinematic overlays — orange-warm so any black gap reads as TV, not comics */}
       <div className="absolute inset-0 bg-gradient-to-r from-background via-background/70 to-transparent" />
       <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
       <div
@@ -119,9 +120,9 @@ const TVHero = () => {
             <Button
               size="lg"
               className="bg-white text-black hover:bg-white/90 font-bold"
-              onClick={() => setModalOpen(true)}
+              onClick={() => navigate(`/bazinga-tv/watch/${current.id}`)}
             >
-              <Play className="h-5 w-5 fill-current" /> Play
+              <Play className="h-5 w-5 fill-current" /> {t("modal.play")}
             </Button>
             <Button
               size="lg"
@@ -129,7 +130,7 @@ const TVHero = () => {
               className="border-white/30 text-white hover:bg-white/10"
               onClick={() => setModalOpen(true)}
             >
-              <Info className="h-5 w-5" /> More Info
+              <Info className="h-5 w-5" /> {t("modal.moreInfo")}
             </Button>
           </div>
         </div>

@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { Check, Play, Plus, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { Check, Play, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchAnime, type AnimeDto } from "@/lib/metadata";
 import { useAuth } from "@/contexts/AuthContext";
@@ -42,6 +44,8 @@ interface AnimeModalProps {
 const AnimeModal = ({ anime, onClose }: AnimeModalProps) => {
   const { token } = useAuth();
   const { isSaved, toggle } = useCollections();
+  const navigate = useNavigate();
+  const { t } = useTranslation();
   const { data: detail } = useQuery({
     queryKey: ["anime-detail", anime.malId],
     queryFn: () => fetchAnime(anime.malId),
@@ -63,55 +67,63 @@ const AnimeModal = ({ anime, onClose }: AnimeModalProps) => {
       payload: full,
     });
 
+  const handlePlay = () => {
+    onClose();
+    navigate(`/bazinga-tv/watch/anime-${full.malId}`);
+  };
+
   return (
     <div
-      className="fixed inset-0 z-[95] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 z-[95] bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center p-2 sm:p-4 animate-fade-in overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-3xl rounded-xl overflow-hidden border border-orange-500/40 bg-card shadow-[0_0_60px_hsl(25_95%_55%/0.4)]"
+        className="relative w-full max-w-3xl my-2 sm:my-0 rounded-xl overflow-hidden border border-orange-500/40 bg-card shadow-[0_0_60px_hsl(25_95%_55%/0.4)] max-h-[calc(100dvh-16px)] sm:max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3 right-3 z-10 h-9 w-9 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center"
-          aria-label="Close"
+          className="absolute top-3 right-3 z-20 h-9 w-9 rounded-full bg-black/80 hover:bg-black ring-1 ring-white/20 flex items-center justify-center"
+          aria-label={t("modal.close")}
         >
           <X className="h-5 w-5" />
         </button>
-        <div className="relative aspect-video">
+        <div className="relative aspect-video shrink-0">
           <img src={backdrop} alt={full.title} className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-card via-card/60 to-transparent" />
           <div className="absolute bottom-4 left-6 right-6">
-            <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white">{full.title}</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-white">{full.title}</h2>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-white/85">
-              <span className="font-bold text-green-500">{matchPercent(full)}% Match</span>
+              <span className="font-bold text-green-500">{matchPercent(full)}% {t("modal.match")}</span>
               {full.year && <span>{full.year}</span>}
               <span className="border border-white/40 px-2 py-0.5 text-xs">{ratingLabel(full)}</span>
               {seasons ? (
                 <span>
-                  {seasons} Season{seasons > 1 ? "s" : ""}
+                  {seasons} {seasons > 1 ? t("modal.seasons") : t("modal.season")}
                 </span>
               ) : full.episodes ? (
-                <span>{full.episodes} episodes</span>
+                <span>{full.episodes} {t("modal.episodes")}</span>
               ) : null}
             </div>
           </div>
         </div>
-        <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
+        <div className="px-6 py-5 space-y-4 overflow-y-auto">
           <p className="text-sm text-muted-foreground leading-relaxed">
-            {full.synopsis ?? "No synopsis yet."}
+            {full.synopsis ?? t("modal.noSynopsis")}
           </p>
           {full.studios.length > 0 && (
             <p className="text-xs text-white/70">
-              <span className="text-white/50 mr-1">Studios:</span>
+              <span className="text-white/50 mr-1">{t("modal.studios")}:</span>
               {full.studios.join(", ")}
             </p>
           )}
           <div className="flex flex-wrap gap-3">
-            <Button className="bg-orange-500 text-black hover:bg-orange-600 font-bold">
-              <Play className="h-4 w-4 fill-current" /> Play
+            <Button
+              className="bg-orange-500 text-black hover:bg-orange-600 font-bold"
+              onClick={handlePlay}
+            >
+              <Play className="h-4 w-4 fill-current" /> {t("modal.play")}
             </Button>
             {token && (
               <Button
@@ -124,19 +136,13 @@ const AnimeModal = ({ anime, onClose }: AnimeModalProps) => {
                 }
               >
                 {saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                {saved ? "In My List" : "My List"}
+                {saved ? t("modal.inMyList") : t("modal.myList")}
               </Button>
             )}
-            <Button variant="ghost" className="text-white hover:bg-white/10">
-              <ThumbsUp className="h-4 w-4" /> Like
-            </Button>
-            <Button variant="ghost" className="text-white hover:bg-white/10">
-              <ThumbsDown className="h-4 w-4" /> Not for me
-            </Button>
           </div>
           {full.genres.length > 0 && (
             <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
-              <span className="text-white/70">Genres:</span>
+              <span className="text-white/70">{t("modal.genres")}:</span>
               {full.genres.map((g, i) => (
                 <span key={g} className="text-orange-400">
                   {g}

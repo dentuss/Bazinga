@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   CreditCard,
@@ -26,19 +27,20 @@ import { cn } from "@/lib/utils";
 
 type SectionId = "overview" | "subscription" | "security" | "devices" | "profiles";
 
-const sections: { id: SectionId; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "subscription", label: "Subscription", icon: CreditCard },
-  { id: "security", label: "Security", icon: ShieldCheck },
-  { id: "devices", label: "Devices", icon: Laptop },
-  { id: "profiles", label: "Profiles", icon: Users },
-];
-
 const Profile = () => {
   const { user, currentProfile, profiles, updateAccount, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const sections: { id: SectionId; label: string; icon: typeof LayoutDashboard }[] = [
+    { id: "overview", label: t("account.overview"), icon: LayoutDashboard },
+    { id: "subscription", label: t("account.subscription"), icon: CreditCard },
+    { id: "security", label: t("account.security"), icon: ShieldCheck },
+    { id: "devices", label: t("account.devices"), icon: Laptop },
+    { id: "profiles", label: t("account.profiles"), icon: Users },
+  ];
 
   const initialSection = (searchParams.get("section") as SectionId) || "overview";
   const [section, setSection] = useState<SectionId>(initialSection);
@@ -90,10 +92,10 @@ const Profile = () => {
         dateOfBirth: formState.dateOfBirth || null,
         phone: formState.phone.trim(),
       });
-      toast({ title: "Account updated", description: "Your account details have been saved." });
+      toast({ title: t("account.accountUpdated"), description: t("account.accountSaved") });
     } catch (err) {
       toast({
-        title: "Could not save changes",
+        title: t("account.couldNotSave"),
         description: err instanceof Error ? err.message : "Try again later.",
         variant: "destructive",
       });
@@ -132,7 +134,7 @@ const Profile = () => {
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Bazinga
+          {t("account.backToBazinga")}
         </button>
 
         <div className="grid gap-8 lg:grid-cols-[240px_1fr]">
@@ -163,10 +165,10 @@ const Profile = () => {
               <Button
                 variant="ghost"
                 onClick={handleLogout}
-                className="w-full justify-start gap-3 text-muted-foreground hover:text-foreground"
+                className="w-full justify-start gap-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
                 <LogOut className="h-4 w-4" />
-                Sign out
+                {t("account.signOut")}
               </Button>
             </nav>
           </aside>
@@ -176,8 +178,10 @@ const Profile = () => {
             {section === "overview" && (
               <div className="space-y-8">
                 <div>
-                  <h1 className="text-3xl md:text-4xl font-black tracking-tight">Account</h1>
-                  <p className="text-sm text-muted-foreground">Member since {user.createdAt?.slice(0, 10) ?? "—"}</p>
+                  <h1 className="text-3xl md:text-4xl font-black tracking-tight">{t("account.title")}</h1>
+                  <p className="text-sm text-muted-foreground">
+                    {t("account.memberSince", { date: user.createdAt?.slice(0, 10) ?? "—" })}
+                  </p>
                 </div>
 
                 <div className="rounded-xl border border-border bg-card p-6 flex flex-wrap items-center gap-6">
@@ -192,36 +196,36 @@ const Profile = () => {
                     <div>
                       <p className="text-xl font-bold">{user.username}</p>
                       <p className="text-sm text-muted-foreground">{user.email}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Role: {user.role ?? "USER"}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {t("account.role")}: {user.role ?? "USER"}
+                      </p>
                     </div>
                   </div>
                   <div className="ml-auto">
                     <Link to="/profiles/manage">
                       <Button variant="outline" className="gap-2">
                         <Pencil className="h-4 w-4" />
-                        Manage Profiles
+                        {t("account.manageProfiles")}
                       </Button>
                     </Link>
                   </div>
                 </div>
 
                 <form onSubmit={handleSubmit} className="rounded-xl border border-border bg-card p-6 space-y-4">
-                  <h2 className="text-lg font-bold">Account details</h2>
+                  <h2 className="text-lg font-bold">{t("account.accountDetails")}</h2>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field id="profile-username" label="Username" value={formState.username} onChange={() => undefined} disabled />
-                    <Field id="profile-email" label="Email" type="email" value={formState.email} onChange={() => undefined} disabled />
-                    <Field id="profile-first" label="First name" value={formState.firstName} onChange={handleChange("firstName")} />
-                    <Field id="profile-last" label="Last name" value={formState.lastName} onChange={handleChange("lastName")} />
-                    <Field id="profile-dob" label="Date of birth" type="date" value={formState.dateOfBirth} onChange={handleChange("dateOfBirth")} />
-                    <Field id="profile-phone" label="Phone number" type="tel" value={formState.phone} onChange={handleChange("phone")} placeholder="+1 555 123 4567" />
+                    <Field id="profile-username" label={t("account.username")} value={formState.username} onChange={() => undefined} disabled />
+                    <Field id="profile-email" label={t("account.email")} type="email" value={formState.email} onChange={() => undefined} disabled />
+                    <Field id="profile-first" label={t("account.firstName")} value={formState.firstName} onChange={handleChange("firstName")} />
+                    <Field id="profile-last" label={t("account.lastName")} value={formState.lastName} onChange={handleChange("lastName")} />
+                    <Field id="profile-dob" label={t("account.dateOfBirth")} type="date" value={formState.dateOfBirth} onChange={handleChange("dateOfBirth")} />
+                    <Field id="profile-phone" label={t("account.phone")} type="tel" value={formState.phone} onChange={handleChange("phone")} placeholder="+1 555 123 4567" />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Username and email are tied to your account. To change them, contact support.
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t("account.contactNote")}</p>
                   <div className="flex flex-wrap gap-3">
                     <Button type="submit" className="gap-2" disabled={saving}>
                       <Save className="h-4 w-4" />
-                      {saving ? "Saving…" : "Save changes"}
+                      {saving ? t("account.saving") : t("account.save")}
                     </Button>
                   </div>
                 </form>
@@ -231,29 +235,28 @@ const Profile = () => {
 
             {section === "subscription" && (
               <div className="space-y-6">
-                <h1 className="text-3xl md:text-4xl font-black tracking-tight">Subscription</h1>
-                <p className="text-sm text-muted-foreground">Plan and billing details.</p>
+                <h1 className="text-3xl md:text-4xl font-black tracking-tight">
+                  {t("account.subscriptionTitle")}
+                </h1>
+                <p className="text-sm text-muted-foreground">{t("account.planSubtitle")}</p>
                 <div className="rounded-xl border border-border bg-card overflow-hidden">
                   <div className="h-1 bg-gradient-to-r from-primary via-primary to-orange-500" />
                   <div className="p-6">
                     <h2 className="text-xl font-bold">
                       {user.subscriptionType && user.subscriptionType !== "Free"
-                        ? `${user.subscriptionType} Plan`
-                        : "Free Plan"}
+                        ? `${user.subscriptionType} ${t("account.plan")}`
+                        : t("account.freePlan")}
                     </h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      4K resolution, immersive audio, ad-free streaming and more.
-                    </p>
                     <div className="mt-4 flex flex-wrap items-center gap-3">
                       <Link to="/bazinga-unlimited">
                         <Button variant="outline" className="gap-2">
                           <CreditCard className="h-4 w-4" />
-                          Change plan
+                          {t("account.changePlan")}
                         </Button>
                       </Link>
                       {user.subscriptionExpiration && (
                         <span className="text-sm text-muted-foreground">
-                          Renews on {user.subscriptionExpiration}
+                          {t("account.renewsOn", { date: user.subscriptionExpiration })}
                         </span>
                       )}
                     </div>
@@ -264,32 +267,36 @@ const Profile = () => {
 
             {section === "security" && (
               <div className="space-y-6">
-                <h1 className="text-3xl md:text-4xl font-black tracking-tight">Security</h1>
-                <p className="text-sm text-muted-foreground">Account credentials and access.</p>
+                <h1 className="text-3xl md:text-4xl font-black tracking-tight">
+                  {t("account.secTitle")}
+                </h1>
+                <p className="text-sm text-muted-foreground">{t("account.secSubtitle")}</p>
 
                 <div className="rounded-xl border border-border bg-card divide-y divide-border">
                   <SecurityRow
                     icon={<ShieldCheck className="h-5 w-5" />}
-                    label="Password"
+                    label={t("account.password")}
                     value="••••••••"
                     action={
                       <Link to="/forgot-password">
-                        <Button variant="outline" size="sm">Change password</Button>
+                        <Button variant="outline" size="sm">
+                          {t("account.changePassword")}
+                        </Button>
                       </Link>
                     }
                   />
-                  <SecurityRow icon={<UserCircle className="h-5 w-5" />} label="Email" value={user.email} />
+                  <SecurityRow icon={<UserCircle className="h-5 w-5" />} label={t("account.email")} value={user.email} />
                   <SecurityRow
                     icon={<Smartphone className="h-5 w-5" />}
-                    label="Phone number"
-                    value={user.phone || "Not set"}
+                    label={t("account.phone")}
+                    value={user.phone || t("account.notSet")}
                     action={
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setSection("overview")}
                       >
-                        {user.phone ? "Update" : "Add"}
+                        {user.phone ? t("account.update") : t("account.add")}
                       </Button>
                     }
                   />
@@ -298,14 +305,12 @@ const Profile = () => {
                 <TwoFactorSetup />
 
                 <div className="rounded-xl border border-border bg-card p-6">
-                  <h2 className="font-bold mb-2">Profile PINs</h2>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Lock any profile behind a 4-digit PIN so only the right person can switch into it.
-                  </p>
+                  <h2 className="font-bold mb-2">{t("account.profilePins")}</h2>
+                  <p className="text-sm text-muted-foreground mb-4">{t("account.profilePinsDesc")}</p>
                   <Link to="/profiles/manage">
                     <Button variant="outline" className="gap-2">
                       <Pencil className="h-4 w-4" />
-                      Manage profile PINs
+                      {t("account.managePins")}
                     </Button>
                   </Link>
                 </div>
@@ -314,20 +319,26 @@ const Profile = () => {
 
             {section === "devices" && (
               <div className="space-y-6">
-                <h1 className="text-3xl md:text-4xl font-black tracking-tight">Devices</h1>
-                <p className="text-sm text-muted-foreground">Manage where you are signed in.</p>
+                <h1 className="text-3xl md:text-4xl font-black tracking-tight">
+                  {t("account.devicesTitle")}
+                </h1>
+                <p className="text-sm text-muted-foreground">{t("account.devicesSubtitle")}</p>
                 <div className="rounded-xl border border-border bg-card p-6">
                   <div className="flex items-center gap-4">
                     <Laptop className="h-8 w-8 text-muted-foreground" />
                     <div className="flex-1">
-                      <p className="font-semibold">This browser</p>
+                      <p className="font-semibold">{t("account.thisBrowser")}</p>
                       <p className="text-sm text-muted-foreground">
-                        Active now — signed in as {user.email}
+                        {t("account.activeNow", { email: user.email })}
                       </p>
                     </div>
-                    <Button variant="ghost" onClick={handleLogout} className="gap-2">
+                    <Button
+                      variant="ghost"
+                      onClick={handleLogout}
+                      className="gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
                       <LogOut className="h-4 w-4" />
-                      Sign out
+                      {t("account.signOut")}
                     </Button>
                   </div>
                 </div>
@@ -338,15 +349,17 @@ const Profile = () => {
               <div className="space-y-6">
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div>
-                    <h1 className="text-3xl md:text-4xl font-black tracking-tight">Profiles</h1>
+                    <h1 className="text-3xl md:text-4xl font-black tracking-tight">
+                      {t("account.profiles")}
+                    </h1>
                     <p className="text-sm text-muted-foreground">
-                      {profiles.length} of 5 profiles in use.
+                      {t("account.profilesInUse", { count: profiles.length })}
                     </p>
                   </div>
                   <Link to="/profiles/manage">
                     <Button variant="outline" className="gap-2">
                       <Pencil className="h-4 w-4" />
-                      Manage Profiles
+                      {t("account.manageProfiles")}
                     </Button>
                   </Link>
                 </div>
@@ -358,8 +371,8 @@ const Profile = () => {
                       <div className="flex-1">
                         <p className="font-semibold">{profile.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {profile.isRoot ? "Main profile" : "Sub-profile"}
-                          {profile.isKids ? " · Kids" : ""}
+                          {profile.isRoot ? t("header.mainProfile") : t("header.subProfile")}
+                          {profile.isKids ? ` · ${t("header.kids")}` : ""}
                         </p>
                       </div>
                       <Link to={`/profiles/edit/${profile.id}`}>

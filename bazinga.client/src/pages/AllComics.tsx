@@ -1,19 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ComicCard from "@/components/ComicCard";
 import ComicModal from "@/components/ComicModal";
 import { Button } from "@/components/ui/button";
-import { apiFetch } from "@/lib/api";
 import { comicMetaCreators, fetchComicsMeta } from "@/lib/metadata";
-import {
-  placeholderComics,
-  type PlaceholderComic,
-} from "@/data/placeholderComics";
-import type { ComicDto } from "@/pages/Index";
 import { cn } from "@/lib/utils";
 
 interface DisplayComic {
@@ -28,47 +23,56 @@ interface DisplayComic {
   metaId?: number;
 }
 
-const PAGE_SIZE = 18; // three rows × six cards on lg+
+const PAGE_SIZE = 18;
 
 const AllComics = () => {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const masterQuery = (searchParams.get("search") ?? "").trim();
+
+  // Local search bar — same pattern as Series. Keeps page-level search next to
+  // the catalogue so users don't have to bounce through the global Cmd-K.
+  const [localQuery, setLocalQuery] = useState(masterQuery);
+  const [debounced, setDebounced] = useState(masterQuery);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<DisplayComic | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
+  // Keep the input synced when the URL changes (e.g. via the global search).
   useEffect(() => {
-    setPage(1);
+    setLocalQuery(masterQuery);
+    setDebounced(masterQuery);
   }, [masterQuery]);
 
-  const { data: dbComics = [] } = useQuery<ComicDto[]>({
-    queryKey: ["comics"],
-    queryFn: () => apiFetch<ComicDto[]>("/api/comics"),
-  });
+  // Debounce typing into the local input so we don't hammer Open Library.
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(localQuery.trim()), 300);
+    return () => clearTimeout(id);
+  }, [localQuery]);
 
-  // Real comic covers (Open Library), paginated server-side. Free-text search
-  // is passed straight through and restricted to the comics subject upstream.
+  useEffect(() => {
+    setPage(1);
+  }, [debounced]);
+
+  const effectiveQuery = debounced || masterQuery;
+
   const metaQuery = useQuery({
-    queryKey: ["comics-meta", "catalog", masterQuery || "", page],
+    queryKey: ["comics-meta", "catalog", effectiveQuery || "", page],
     queryFn: () =>
       fetchComicsMeta({
         page,
         limit: PAGE_SIZE,
-        q: masterQuery || undefined,
+        q: effectiveQuery || undefined,
       }),
     placeholderData: keepPreviousData,
     staleTime: 30 * 60 * 1000,
   });
   const metaIssues = metaQuery.data?.data ?? [];
-  const metaConfigured = metaIssues.length > 0;
   const metaTotal = metaQuery.data?.total ?? 0;
 
-  // Three sources, in order of preference: live comic metadata → DB comics →
-  // the placeholder catalogue. We collapse them into the same DisplayComic
-  // shape so the rest of the page is unchanged.
-  const all = useMemo<DisplayComic[]>(() => {
-    if (metaIssues.length > 0) {
-      return metaIssues.map<DisplayComic>((m) => ({
+  const all = useMemo<DisplayComic[]>(
+    () =>
+      metaIssues.map<DisplayComic>((m) => ({
         id: m.id,
         title: m.title,
         series: m.series ?? "",
@@ -78,49 +82,10 @@ const AllComics = () => {
         description: m.description ?? undefined,
         createdAt: m.year ? `${m.year}` : undefined,
         metaId: m.id,
-      }));
-    }
-    if (dbComics.length > 0) {
-      return dbComics.map((c) => ({
-        id: c.id,
-        title: c.title,
-        series: c.series ?? "",
-        character: c.mainCharacter ?? "",
-        creators: c.author ?? "",
-        image: c.image,
-        description: c.description,
-        createdAt: c.createdAt,
-      }));
-    }
-    return placeholderComics.map<DisplayComic>((p: PlaceholderComic) => ({
-      id: p.id,
-      title: p.title,
-      series: p.series,
-      character: p.character,
-      creators: p.creators,
-      image: p.image,
-      description: p.description,
-      createdAt: p.releaseDate,
-    }));
-  }, [dbComics, metaIssues]);
+      })),
+    [metaIssues]
+  );
 
-  // When we're paging live metadata server-side, the local search filter is a
-  // no-op (the server already filtered). For DB / placeholder sources we apply
-  // the same in-memory filter we always did.
-  const filtered = useMemo(() => {
-    if (metaConfigured) return all;
-    if (!masterQuery) return all;
-    const q = masterQuery.toLowerCase();
-    return all.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.creators.toLowerCase().includes(q) ||
-        c.series.toLowerCase().includes(q) ||
-        c.character.toLowerCase().includes(q)
-    );
-  }, [masterQuery, all, metaConfigured]);
-
-  // Deep-link: ?openComic=<id> pops the modal as if the card was clicked.
   const openComicId = searchParams.get("openComic");
   useEffect(() => {
     if (!openComicId || selected) return;
@@ -132,14 +97,8 @@ const AllComics = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openComicId, all]);
 
-  // Live metadata paginates server-side, so the slice is identity (already one
-  // page). For DB / placeholder modes we still slice locally.
-  const totalCount = metaConfigured ? metaTotal : filtered.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(metaTotal / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
-  const pageItems = metaConfigured
-    ? filtered
-    : filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return (
     <div className="min-h-screen bg-background">
@@ -155,40 +114,57 @@ const AllComics = () => {
           />
           <div className="relative container mx-auto px-4 md:px-8 py-14 md:py-20 text-center">
             <p className="text-xs md:text-sm font-bold uppercase tracking-[0.4em] text-primary">
-              Bazinga Comics
+              {t("comics.bazingaComics")}
             </p>
             <h1 className="mt-3 text-4xl md:text-6xl font-black tracking-tighter leading-[0.95]">
-              All Comics
+              {t("comics.allComicsTitle")}
             </h1>
             <p className="mt-4 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
-              {metaConfigured
-                ? masterQuery
-                  ? `${totalCount.toLocaleString()} issues matching "${masterQuery}", sourced live from Open Library.`
-                  : `${totalCount.toLocaleString()} superhero issues sourced live from Open Library.`
-                : masterQuery
-                  ? `${filtered.length} comics matching "${masterQuery}".`
-                  : `${all.length} issues across every series in the Bazinga catalogue.`}
+              {effectiveQuery
+                ? t("comics.matchingSummary", { count: metaTotal.toLocaleString(), query: effectiveQuery })
+                : t("comics.catalogSummary", { count: metaTotal.toLocaleString() })}
             </p>
           </div>
         </section>
 
         <section className="container mx-auto px-4 md:px-8 py-10 md:py-14">
-          {pageItems.length === 0 ? (
+          {/* Local search — mirrors the Series page so every catalog has the same chrome */}
+          <div className="flex justify-end mb-6">
+            <div className="relative w-full md:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                value={localQuery}
+                onChange={(e) => setLocalQuery(e.target.value)}
+                placeholder={t("comics.searchPlaceholder")}
+                className="w-full h-10 rounded-md bg-card border border-border pl-9 pr-3 text-sm outline-none focus:border-primary"
+              />
+            </div>
+          </div>
+
+          {metaQuery.isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-16">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t("manga.loading")}
+            </div>
+          ) : all.length === 0 ? (
             <div className="text-center py-16">
-              <p className="text-muted-foreground text-lg">
-                {masterQuery
-                  ? `No comics match "${masterQuery}".`
-                  : "Nothing here yet."}
-              </p>
-              {masterQuery && (
-                <Button variant="link" asChild className="mt-2">
-                  <a href="/comics/all">Clear search</a>
+              <p className="text-muted-foreground text-lg">{t("comics.noneFound")}</p>
+              {effectiveQuery && (
+                <Button
+                  variant="link"
+                  className="mt-2"
+                  onClick={() => {
+                    setLocalQuery("");
+                    setDebounced("");
+                  }}
+                >
+                  {t("comics.clearFilters")}
                 </Button>
               )}
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
-              {pageItems.map((c) => (
+              {all.map((c) => (
                 <ComicCard
                   key={c.id}
                   image={c.image}
@@ -210,17 +186,18 @@ const AllComics = () => {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 direction="prev"
               >
-                Previous
+                {t("comics.previous")}
               </PagerButton>
               <span className="text-sm text-muted-foreground">
-                Page <strong className="text-foreground">{safePage}</strong> of {totalPages}
+                {t("comics.page")} <strong className="text-foreground">{safePage}</strong>{" "}
+                {t("comics.of")} {totalPages}
               </span>
               <PagerButton
                 disabled={safePage >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
                 direction="next"
               >
-                Next
+                {t("comics.next")}
               </PagerButton>
             </div>
           )}

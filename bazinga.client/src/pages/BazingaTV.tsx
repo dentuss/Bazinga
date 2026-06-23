@@ -1,28 +1,28 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import {
   Play,
   Plus,
+  Check,
   ChevronRight,
   ChevronLeft,
   ChevronDown,
   Loader2,
-  ThumbsUp,
 } from "lucide-react";
 import TVHeader from "@/components/TVHeader";
 import TVHero from "@/components/TVHero";
 import SuperheroShowsSection from "@/components/SuperheroShowsSection";
 import AnimeModal from "@/components/AnimeModal";
 import {
-  fetchAnimeGenres,
   fetchSeasonNow,
   fetchSeasonUpcoming,
   fetchTopAnime,
-  searchAnime,
   type AnimeDto,
-  type GenreDto,
 } from "@/lib/metadata";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCollections } from "@/contexts/CollectionsContext";
 import { cn } from "@/lib/utils";
 import heroBanner1 from "@/assets/hero-banner-1.jpg";
 import heroBanner2 from "@/assets/hero-banner-2.jpg";
@@ -76,6 +76,34 @@ const AnimeCard = ({
   const poster = show.largeImageUrl ?? show.imageUrl ?? backdropFor(show.malId);
   const seasons = seasonCount(show);
   const rating = ratingLabel(show);
+  const navigate = useNavigate();
+  const { token } = useAuth();
+  const { isSaved, toggle } = useCollections();
+  const { t } = useTranslation();
+  const saved = isSaved("mylist", "anime", String(show.malId));
+
+  const handlePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/bazinga-tv/watch/anime-${show.malId}`);
+  };
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!token) return;
+    void toggle("mylist", {
+      kind: "anime",
+      contentId: String(show.malId),
+      title: show.title,
+      image: show.largeImageUrl ?? show.imageUrl ?? null,
+      subtitle: [show.year, ratingLabel(show)].filter(Boolean).join(" · "),
+      payload: show,
+    });
+  };
+
+  const handleMore = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSelect(show);
+  };
 
   return (
     <div className="relative shrink-0 w-40 md:w-52 snap-start" style={{ aspectRatio: "2 / 3" }}>
@@ -109,25 +137,44 @@ const AnimeCard = ({
               {show.title}
             </p>
             <div className="flex items-center gap-1.5 mb-2">
-              <span className="grid place-items-center h-7 w-7 rounded-full bg-white text-black hover:bg-white/85">
+              <button
+                type="button"
+                onClick={handlePlay}
+                aria-label={t("modal.play")}
+                className="grid place-items-center h-7 w-7 rounded-full bg-white text-black hover:bg-white/85 cursor-pointer"
+              >
                 <Play className="h-3.5 w-3.5 fill-current" />
-              </span>
-              <span className="grid place-items-center h-7 w-7 rounded-full border border-white/40 text-white hover:border-white">
-                <Plus className="h-3.5 w-3.5" />
-              </span>
-              <span className="grid place-items-center h-7 w-7 rounded-full border border-white/40 text-white hover:border-white">
-                <ThumbsUp className="h-3.5 w-3.5" />
-              </span>
-              <span className="ml-auto grid place-items-center h-7 w-7 rounded-full border border-white/40 text-white hover:border-white">
+              </button>
+              {token && (
+                <button
+                  type="button"
+                  onClick={handleToggle}
+                  aria-label={saved ? t("modal.inMyList") : t("modal.myList")}
+                  className={cn(
+                    "grid place-items-center h-7 w-7 rounded-full border text-white cursor-pointer transition-colors",
+                    saved
+                      ? "border-orange-500 bg-orange-500/30 text-orange-300 hover:bg-orange-500/40"
+                      : "border-white/40 hover:border-white"
+                  )}
+                >
+                  {saved ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleMore}
+                aria-label={t("modal.moreInfo")}
+                className="ml-auto grid place-items-center h-7 w-7 rounded-full border border-white/40 text-white hover:border-white cursor-pointer"
+              >
                 <ChevronDown className="h-3.5 w-3.5" />
-              </span>
+              </button>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-[10px] md:text-xs">
-              <span className="font-bold text-green-500">{matchPercent(show)}% Match</span>
+              <span className="font-bold text-green-500">{matchPercent(show)}% {t("modal.match")}</span>
               <span className="border border-white/40 px-1 py-px text-white/80">{rating}</span>
               {seasons ? (
                 <span className="text-white/80">
-                  {seasons} Season{seasons > 1 ? "s" : ""}
+                  {seasons} {seasons > 1 ? t("modal.seasons") : t("modal.season")}
                 </span>
               ) : null}
             </div>
@@ -241,7 +288,7 @@ const ShowRow = ({
   onSelect,
   loading,
   badge,
-  exploreLabel = "Explore all",
+  exploreLabel,
   exploreHref = "/bazinga-tv/anime",
   rows = 2,
 }: {
@@ -278,10 +325,11 @@ const ContinueWatchingRow = ({
   onSelect: (a: AnimeDto) => void;
 }) => {
   const id = "continue-watching";
+  const { t } = useTranslation();
   return (
     <section className="relative py-4 md:py-6" id={id}>
       <div className="container mx-auto px-4 md:px-8 mb-3">
-        <h3 className="text-xl md:text-2xl font-black tracking-tight">Continue Watching</h3>
+        <h3 className="text-xl md:text-2xl font-black tracking-tight">{t("tvHome.continueWatching")}</h3>
       </div>
       <div className="relative group/row">
         <button
@@ -323,7 +371,7 @@ const ContinueWatchingRow = ({
                   <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
                   {newEpisodes && (
                     <span className="absolute top-2 left-2 bg-orange-500 text-black text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded">
-                      New Episodes
+                      {t("tvHome.newEpisodes")}
                     </span>
                   )}
                   <div className="absolute inset-0 grid place-items-center opacity-0 group-hover/cw:opacity-100 transition-opacity">
@@ -336,7 +384,7 @@ const ContinueWatchingRow = ({
                       {item.title}
                     </p>
                     <p className="text-[11px] md:text-xs text-white/80 line-clamp-1">
-                      Episode {ep} of {item.episodes ?? "—"}
+                      {t("tvHome.episodeOf", { ep, total: item.episodes ?? "—" })}
                     </p>
                   </div>
                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/15">
@@ -360,13 +408,14 @@ const TopTenRow = ({
   onSelect: (a: AnimeDto) => void;
 }) => {
   const id = "top-10";
+  const { t } = useTranslation();
   return (
     <section className="relative py-4 md:py-6" id={id}>
       <div className="container mx-auto px-4 md:px-8 mb-3 flex items-center gap-3">
         <span className="grid place-items-center h-7 w-7 rounded-sm bg-orange-500 text-black text-xs font-black">
           10
         </span>
-        <h3 className="text-xl md:text-2xl font-black tracking-tight">Top 10 in Bazinga Today</h3>
+        <h3 className="text-xl md:text-2xl font-black tracking-tight">{t("tvHome.topTen")}</h3>
       </div>
       <div className="relative group/row">
         <button
@@ -437,77 +486,12 @@ const TopTenRow = ({
 };
 
 // ---------------------------------------------------------------------------
-// Genre filter
-// ---------------------------------------------------------------------------
-
-const GenreBar = ({
-  genres,
-  activeId,
-  onChange,
-}: {
-  genres: GenreDto[];
-  activeId: number | null;
-  onChange: (id: number | null) => void;
-}) => {
-  // Curated list — only show high-signal genres so the bar is scannable.
-  const curated = [
-    "Action",
-    "Adventure",
-    "Comedy",
-    "Drama",
-    "Fantasy",
-    "Mystery",
-    "Romance",
-    "Sci-Fi",
-    "Slice of Life",
-    "Supernatural",
-    "Sports",
-    "Horror",
-  ];
-  const shown = genres
-    .filter((g) => curated.includes(g.name))
-    .sort((a, b) => curated.indexOf(a.name) - curated.indexOf(b.name));
-
-  if (shown.length === 0) return null;
-
-  return (
-    <div className="container mx-auto px-4 md:px-8 mt-4 mb-1 flex gap-2 overflow-x-auto no-scrollbar" style={{ scrollbarWidth: "none" }}>
-      <button
-        type="button"
-        onClick={() => onChange(null)}
-        className={`shrink-0 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-full border transition-colors ${
-          activeId === null
-            ? "bg-orange-500 text-black border-orange-500"
-            : "bg-transparent text-white/80 border-white/20 hover:border-white/60"
-        }`}
-      >
-        All
-      </button>
-      {shown.map((g) => (
-        <button
-          key={g.malId}
-          type="button"
-          onClick={() => onChange(g.malId)}
-          className={`shrink-0 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-full border transition-colors ${
-            activeId === g.malId
-              ? "bg-orange-500 text-black border-orange-500"
-              : "bg-transparent text-white/80 border-white/20 hover:border-white/60"
-          }`}
-        >
-          {g.name}
-        </button>
-      ))}
-    </div>
-  );
-};
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 const BazingaTV = () => {
   const [selectedShow, setSelectedShow] = useState<AnimeDto | null>(null);
-  const [activeGenre, setActiveGenre] = useState<number | null>(null);
+  const { t } = useTranslation();
 
   const topAnime = useQuery({
     queryKey: ["anime-top"],
@@ -524,19 +508,6 @@ const BazingaTV = () => {
     queryFn: () => fetchSeasonUpcoming(1, 18),
     staleTime: 15 * 60 * 1000,
   });
-  const filteredAnime = useQuery({
-    queryKey: ["anime-by-genre", activeGenre ?? "all"],
-    queryFn: () =>
-      activeGenre
-        ? searchAnime({ genre: activeGenre, orderBy: "score", limit: 18 })
-        : searchAnime({ orderBy: "score", limit: 18 }),
-    staleTime: 15 * 60 * 1000,
-  });
-  const genres = useQuery({
-    queryKey: ["anime-genres"],
-    queryFn: fetchAnimeGenres,
-    staleTime: 24 * 60 * 60 * 1000,
-  });
 
   // "Continue watching" is fake — we don't track real progress yet — but we
   // pull the titles/posters from the same top-anime fetch so it doesn't feel
@@ -550,13 +521,6 @@ const BazingaTV = () => {
       {/* Hero trailer carousel (real local trailer videos) */}
       <TVHero />
 
-      {/* Genre filter bar (search lives in the global header — Cmd/Ctrl+K) */}
-      <GenreBar
-        genres={genres.data ?? []}
-        activeId={activeGenre}
-        onChange={setActiveGenre}
-      />
-
       {/* Rows */}
       <main className="relative z-10 pt-2 md:pt-4 space-y-2 pb-20">
         <ContinueWatchingRow
@@ -565,37 +529,40 @@ const BazingaTV = () => {
         />
         <TopTenRow items={topAnime.data?.data ?? []} onSelect={(s) => setSelectedShow(s)} />
         <ShowRow
-          title="Trending Now"
+          title={t("tvHome.trendingNow")}
           items={seasonNow.data?.data ?? []}
           onSelect={(s) => setSelectedShow(s)}
           loading={seasonNow.isLoading}
           rows={1}
+          exploreLabel={t("tvHome.exploreAll")}
         />
         <SuperheroShowsSection />
         <ShowRow
-          title={activeGenre ? "Anime Universe · Filtered" : "Anime Universe"}
-          items={filteredAnime.data?.data ?? []}
+          title={t("tvHome.animeUniverse")}
+          items={topAnime.data?.data ?? []}
           onSelect={(s) => setSelectedShow(s)}
-          loading={filteredAnime.isLoading}
+          loading={topAnime.isLoading}
+          exploreLabel={t("tvHome.exploreAll")}
         />
         <ShowRow
-          title="New & Noteworthy"
+          title={t("tvHome.newNoteworthy")}
           items={seasonUpcoming.data?.data ?? []}
           onSelect={(s) => setSelectedShow(s)}
           loading={seasonUpcoming.isLoading}
+          exploreLabel={t("tvHome.exploreAll")}
         />
       </main>
 
       {/* Footer */}
       <footer className="border-t border-border/60 py-10">
         <div className="container mx-auto px-4 md:px-8 text-sm text-muted-foreground flex flex-col md:flex-row gap-4 items-center justify-between">
-          <p>©2025 BAZINGA TV. Streaming the multiverse. Metadata via Jikan / MyAnimeList.</p>
+          <p>©2025 BAZINGA TV.</p>
           <div className="flex items-center gap-4">
             <Link to="/" className="hover:text-foreground transition-colors">
-              Switch experience
+              {t("choice.chooseExperience")}
             </Link>
             <Link to="/comics" className="hover:text-foreground transition-colors">
-              Bazinga Comics
+              {t("header.comics")}
             </Link>
           </div>
         </div>
