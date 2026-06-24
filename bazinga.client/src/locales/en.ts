@@ -127,6 +127,7 @@ const en = {
     animeUniverse: "Anime Universe",
     animeUniverseFiltered: "Anime Universe · Filtered",
     newNoteworthy: "New & Noteworthy",
+    movies: "Bazinga Movies",
     exploreAll: "Explore all",
     newEpisodes: "New Episodes",
     episode: "Episode",

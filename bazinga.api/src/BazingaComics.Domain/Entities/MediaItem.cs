@@ -7,8 +7,11 @@ namespace BazingaComics.Domain.Entities;
 /// appear on and how Play behaves:
 ///   * <see cref="Trailer"/> — short promo clip, no seasons, played by
 ///     <see cref="MediaItem.TrailerUrl"/>.
-///   * <see cref="Show"/>    — multi-episode series; one or more
-///     <see cref="MediaSeason"/>s, each with <see cref="MediaEpisode"/>s.
+///   * <see cref="Show"/>    — multi-episode live-action / animated series;
+///     prepends the Superhero Shows rail.
+///   * <see cref="Anime"/>   — multi-episode anime; prepends the Anime
+///     Universe rail. Same shape as Show but rendered in a different
+///     section so anime cards live next to anime.
 ///   * <see cref="Movie"/>   — modelled as a single season with one
 ///     "episode" row holding the movie file URL.
 /// </summary>
@@ -17,6 +20,7 @@ public enum MediaKind
     Trailer = 0,
     Show = 1,
     Movie = 2,
+    Anime = 3,
 }
 
 /// <summary>

@@ -127,6 +127,7 @@ const uk = {
     animeUniverse: "Всесвіт аніме",
     animeUniverseFiltered: "Всесвіт аніме · фільтровано",
     newNoteworthy: "Нове та помітне",
+    movies: "Bazinga Фільми",
     exploreAll: "Усі",
     newEpisodes: "Нові епізоди",
     episode: "Епізод",

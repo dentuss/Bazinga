@@ -28,7 +28,7 @@ public class AdminMediaController : ControllerBase
         var items = await _db.MediaItems
             .AsNoTracking()
             .OrderBy(m => m.SortOrder)
-            .ThenByDescending(m => m.UpdatedAt)
+            .ThenByDescending(m => m.CreatedAt)
             .ToListAsync(ct);
         return Ok(items.Select(MediaMapping.ToListDto));
     }

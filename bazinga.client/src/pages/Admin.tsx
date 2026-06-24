@@ -447,6 +447,11 @@ const Admin = () => {
       <Header />
       <main className="container mx-auto px-4 py-12 flex-1">
         <div className="max-w-5xl mx-auto space-y-8">
+          <nav className="flex items-center gap-4 text-sm">
+            <span className="text-primary font-semibold">Comics + Users</span>
+            <span className="text-muted-foreground">·</span>
+            <a href="/admin/media" className="text-muted-foreground hover:text-foreground">Media</a>
+          </nav>
           <div>
             <p className="text-sm text-primary font-semibold tracking-wide uppercase">Admin console</p>
             <h1 className="text-3xl md:text-4xl font-black text-foreground mt-2">Add a new comic</h1>

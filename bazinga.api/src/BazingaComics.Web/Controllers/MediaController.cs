@@ -38,7 +38,7 @@ public class MediaController : ControllerBase
 
         var items = await query
             .OrderBy(m => m.SortOrder)
-            .ThenByDescending(m => m.UpdatedAt)
+            .ThenByDescending(m => m.CreatedAt)
             .ToListAsync(ct);
 
         return Ok(items.Select(MediaMapping.ToListDto));
@@ -52,7 +52,7 @@ public class MediaController : ControllerBase
             .AsNoTracking()
             .Where(m => m.IsFeatured)
             .OrderBy(m => m.SortOrder)
-            .ThenByDescending(m => m.UpdatedAt)
+            .ThenByDescending(m => m.CreatedAt)
             .ToListAsync(ct);
 
         return Ok(items.Select(MediaMapping.ToListDto));

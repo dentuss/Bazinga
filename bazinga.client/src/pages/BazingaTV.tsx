@@ -16,12 +16,14 @@ import TVHeader from "@/components/TVHeader";
 import TVHero from "@/components/TVHero";
 import SuperheroShowsSection from "@/components/SuperheroShowsSection";
 import AnimeModal from "@/components/AnimeModal";
+import MediaRailCard from "@/components/MediaRailCard";
 import {
   fetchSeasonNow,
   fetchSeasonUpcoming,
   fetchTopAnime,
   type AnimeDto,
 } from "@/lib/metadata";
+import { listMedia, type MediaItem } from "@/lib/media";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCollections } from "@/contexts/CollectionsContext";
 import { hasTVAccess } from "@/lib/access";
@@ -306,6 +308,19 @@ const RowChrome = ({
   </section>
 );
 
+/** DB-only row used for movies (no Jikan / TVMaze counterpart for movies). */
+const MoviesRow = ({ movies }: { movies: MediaItem[] }) => {
+  const id = "bazinga-movies";
+  const { t } = useTranslation();
+  return (
+    <RowChrome id={id} title={t("tvHome.movies")} rows={2} empty={movies.length === 0}>
+      {movies.map((m) => (
+        <MediaRailCard key={`m-${m.id}`} item={m} />
+      ))}
+    </RowChrome>
+  );
+};
+
 const ShowRow = ({
   title,
   items,
@@ -315,6 +330,9 @@ const ShowRow = ({
   exploreLabel,
   exploreHref = "/bazinga-tv/anime",
   rows = 2,
+  // DB-backed media items prepend the rail so admin-added titles ("Berserk"
+  // etc.) sit at position 1 ahead of the Jikan / TVMaze cards.
+  originals = [],
 }: {
   title: string;
   items: AnimeDto[];
@@ -324,6 +342,7 @@ const ShowRow = ({
   exploreLabel?: string;
   exploreHref?: string;
   rows?: 1 | 2;
+  originals?: MediaItem[];
 }) => (
   <RowChrome
     id={railId(title)}
@@ -333,8 +352,11 @@ const ShowRow = ({
     exploreHref={exploreHref}
     rows={rows}
     loading={loading}
-    empty={!loading && items.length === 0}
+    empty={!loading && items.length === 0 && originals.length === 0}
   >
+    {originals.map((m) => (
+      <MediaRailCard key={`m-${m.id}`} item={m} />
+    ))}
     {items.map((show) => (
       <AnimeCard key={show.malId} show={show} onSelect={onSelect} />
     ))}
@@ -533,6 +555,24 @@ const BazingaTV = () => {
     staleTime: 15 * 60 * 1000,
   });
 
+  // Admin-added (DB) items prepend the rails by kind so they always sit in
+  // front of the external Jikan / TVMaze cards.
+  const dbAnime = useQuery({
+    queryKey: ["media", "list", "anime"],
+    queryFn: () => listMedia("anime"),
+    staleTime: 5 * 60 * 1000,
+  });
+  const dbShows = useQuery({
+    queryKey: ["media", "list", "show"],
+    queryFn: () => listMedia("show"),
+    staleTime: 5 * 60 * 1000,
+  });
+  const dbMovies = useQuery({
+    queryKey: ["media", "list", "movie"],
+    queryFn: () => listMedia("movie"),
+    staleTime: 5 * 60 * 1000,
+  });
+
   // "Continue watching" is fake — we don't track real progress yet — but we
   // pull the titles/posters from the same top-anime fetch so it doesn't feel
   // disconnected.
@@ -560,14 +600,18 @@ const BazingaTV = () => {
           rows={1}
           exploreLabel={t("tvHome.exploreAll")}
         />
-        <SuperheroShowsSection />
+        <SuperheroShowsSection originals={dbShows.data ?? []} />
         <ShowRow
           title={t("tvHome.animeUniverse")}
           items={topAnime.data?.data ?? []}
           onSelect={(s) => setSelectedShow(s)}
           loading={topAnime.isLoading}
           exploreLabel={t("tvHome.exploreAll")}
+          originals={dbAnime.data ?? []}
         />
+        {(dbMovies.data?.length ?? 0) > 0 && (
+          <MoviesRow movies={dbMovies.data ?? []} />
+        )}
         <ShowRow
           title={t("tvHome.newNoteworthy")}
           items={seasonUpcoming.data?.data ?? []}
