@@ -29,6 +29,9 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<ReportCategory> ReportCategories => Set<ReportCategory>();
     public DbSet<NewsPost> NewsPosts => Set<NewsPost>();
+    public DbSet<MediaItem> MediaItems => Set<MediaItem>();
+    public DbSet<MediaSeason> MediaSeasons => Set<MediaSeason>();
+    public DbSet<MediaEpisode> MediaEpisodes => Set<MediaEpisode>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -312,6 +315,58 @@ public class AppDbContext : DbContext, IAppDbContext
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.ExpiresAt).HasColumnName("expires_at");
             e.HasOne(x => x.Author).WithMany().HasForeignKey(x => x.AuthorId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // --- Media catalogue (TV/anime series + movies + standalone trailers)
+        b.Entity<MediaItem>(e =>
+        {
+            e.ToTable("media_items");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Slug).HasColumnName("slug").HasMaxLength(120).IsRequired();
+            e.Property(x => x.Kind).HasColumnName("kind").HasConversion<string>().HasMaxLength(20).IsRequired();
+            e.Property(x => x.Title).HasColumnName("title").HasMaxLength(255).IsRequired();
+            e.Property(x => x.Tagline).HasColumnName("tagline").HasMaxLength(500);
+            e.Property(x => x.Description).HasColumnName("description").HasColumnType("TEXT");
+            e.Property(x => x.Year).HasColumnName("year");
+            e.Property(x => x.Rating).HasColumnName("rating").HasMaxLength(20);
+            e.Property(x => x.GenresJson).HasColumnName("genres_json").HasColumnType("TEXT");
+            e.Property(x => x.BadgesJson).HasColumnName("badges_json").HasColumnType("TEXT");
+            e.Property(x => x.BackdropImage).HasColumnName("backdrop_image").HasMaxLength(1000);
+            e.Property(x => x.PosterImage).HasColumnName("poster_image").HasMaxLength(1000);
+            e.Property(x => x.TrailerUrl).HasColumnName("trailer_url").HasMaxLength(1000);
+            e.Property(x => x.IsFeatured).HasColumnName("is_featured").HasDefaultValue(false);
+            e.Property(x => x.SortOrder).HasColumnName("sort_order").HasDefaultValue(0);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.HasIndex(x => x.Slug).IsUnique();
+            e.HasIndex(x => new { x.Kind, x.IsFeatured });
+            e.HasMany(x => x.Seasons).WithOne(s => s.MediaItem!).HasForeignKey(s => s.MediaItemId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<MediaSeason>(e =>
+        {
+            e.ToTable("media_seasons");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.MediaItemId).HasColumnName("media_item_id").IsRequired();
+            e.Property(x => x.Number).HasColumnName("number").IsRequired();
+            e.Property(x => x.Title).HasColumnName("title").HasMaxLength(200);
+            e.Property(x => x.SortOrder).HasColumnName("sort_order").HasDefaultValue(0);
+            e.HasIndex(x => new { x.MediaItemId, x.Number }).IsUnique();
+            e.HasMany(x => x.Episodes).WithOne(ep => ep.Season!).HasForeignKey(ep => ep.SeasonId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<MediaEpisode>(e =>
+        {
+            e.ToTable("media_episodes");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.SeasonId).HasColumnName("season_id").IsRequired();
+            e.Property(x => x.Number).HasColumnName("number").IsRequired();
+            e.Property(x => x.Title).HasColumnName("title").HasMaxLength(255).IsRequired();
+            e.Property(x => x.Description).HasColumnName("description").HasColumnType("TEXT");
+            e.Property(x => x.RuntimeMinutes).HasColumnName("runtime_minutes");
+            e.Property(x => x.VideoUrl).HasColumnName("video_url").HasMaxLength(1000).IsRequired();
+            e.Property(x => x.Thumbnail).HasColumnName("thumbnail").HasMaxLength(1000);
+            e.HasIndex(x => new { x.SeasonId, x.Number }).IsUnique();
         });
     }
 

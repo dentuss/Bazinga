@@ -106,6 +106,57 @@ public static class DbInitializer
                 INDEX ix_2fa_challenge_user (user_id)
             );");
 
+        // Media catalogue — TV/anime series, movies and standalone trailers.
+        // Created idempotently so existing DBs forward-patch on next deploy
+        // without losing the rest of their data.
+        db.Database.ExecuteSqlRaw(@"
+            CREATE TABLE IF NOT EXISTS media_items (
+                id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                slug VARCHAR(120) NOT NULL,
+                kind VARCHAR(20) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                tagline VARCHAR(500) NULL,
+                description TEXT NULL,
+                year INT NULL,
+                rating VARCHAR(20) NULL,
+                genres_json TEXT NULL,
+                badges_json TEXT NULL,
+                backdrop_image VARCHAR(1000) NULL,
+                poster_image VARCHAR(1000) NULL,
+                trailer_url VARCHAR(1000) NULL,
+                is_featured TINYINT(1) NOT NULL DEFAULT 0,
+                sort_order INT NOT NULL DEFAULT 0,
+                created_at DATETIME(6) NOT NULL,
+                updated_at DATETIME(6) NOT NULL,
+                UNIQUE INDEX ix_media_items_slug (slug),
+                INDEX ix_media_items_kind_featured (kind, is_featured)
+            );");
+
+        db.Database.ExecuteSqlRaw(@"
+            CREATE TABLE IF NOT EXISTS media_seasons (
+                id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                media_item_id BIGINT NOT NULL,
+                number INT NOT NULL,
+                title VARCHAR(200) NULL,
+                sort_order INT NOT NULL DEFAULT 0,
+                UNIQUE INDEX ix_media_seasons_item_number (media_item_id, number),
+                CONSTRAINT fk_media_seasons_items FOREIGN KEY (media_item_id) REFERENCES media_items(id) ON DELETE CASCADE
+            );");
+
+        db.Database.ExecuteSqlRaw(@"
+            CREATE TABLE IF NOT EXISTS media_episodes (
+                id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                season_id BIGINT NOT NULL,
+                number INT NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                description TEXT NULL,
+                runtime_minutes INT NULL,
+                video_url VARCHAR(1000) NOT NULL,
+                thumbnail VARCHAR(1000) NULL,
+                UNIQUE INDEX ix_media_episodes_season_number (season_id, number),
+                CONSTRAINT fk_media_episodes_seasons FOREIGN KEY (season_id) REFERENCES media_seasons(id) ON DELETE CASCADE
+            );");
+
         // Add columns that arrived after the original schema if they're missing on
         // an older database. MySQL lacks `ADD COLUMN IF NOT EXISTS`, so
         // AddColumnIfMissing just attempts the ALTER and treats the duplicate

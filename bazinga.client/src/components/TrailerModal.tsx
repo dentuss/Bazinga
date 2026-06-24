@@ -2,32 +2,39 @@ import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Check, Play, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Trailer } from "@/data/trailers";
+import type { MediaItem } from "@/lib/media";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCollections } from "@/contexts/CollectionsContext";
 import { hasTVAccess } from "@/lib/access";
 
 interface TrailerModalProps {
-  trailer: Trailer;
+  media: MediaItem;
   onClose: () => void;
 }
 
-const TrailerModal = ({ trailer, onClose }: TrailerModalProps) => {
+const TrailerModal = ({ media, onClose }: TrailerModalProps) => {
   const navigate = useNavigate();
   const { user, token } = useAuth();
   const { isSaved, toggle } = useCollections();
   const { t } = useTranslation();
-  const saved = isSaved("mylist", "show", `trailer-${trailer.id}`);
+  // Stable id under the slug so the same item produces the same collection key
+  // regardless of whether it's a trailer/show/movie row in the DB.
+  const collectionKey = `media-${media.slug}`;
+  const saved = isSaved("mylist", "show", collectionKey);
   const canWatch = hasTVAccess(user?.subscriptionType);
 
   const handleToggle = () =>
     void toggle("mylist", {
       kind: "show",
-      contentId: `trailer-${trailer.id}`,
-      title: trailer.title,
-      image: null,
-      subtitle: trailer.tagline,
+      contentId: collectionKey,
+      title: media.title,
+      image: media.posterImage ?? media.backdropImage ?? null,
+      subtitle: media.tagline ?? undefined,
     });
+
+  // Prefer the short trailer clip when set; otherwise fall back to the
+  // backdrop image so the modal isn't empty above the metadata.
+  const reelSrc = media.trailerUrl ?? undefined;
 
   return (
     <div
@@ -35,7 +42,7 @@ const TrailerModal = ({ trailer, onClose }: TrailerModalProps) => {
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label={`${trailer.title} trailer`}
+      aria-label={`${media.title} trailer`}
     >
       <div
         className="relative w-full max-w-3xl my-2 sm:my-0 rounded-xl overflow-hidden border border-orange-500/40 bg-card shadow-[0_0_60px_hsl(25_95%_55%/0.4)] max-h-[calc(100dvh-16px)] sm:max-h-[90vh] flex flex-col"
@@ -51,27 +58,44 @@ const TrailerModal = ({ trailer, onClose }: TrailerModalProps) => {
         </button>
 
         <div className="relative aspect-video bg-black shrink-0">
-          <video
-            key={trailer.id}
-            src={trailer.src}
-            className="absolute inset-0 h-full w-full object-contain bg-black"
-            autoPlay
-            controls
-            playsInline
-          />
+          {reelSrc ? (
+            <video
+              key={media.id}
+              src={reelSrc}
+              poster={media.backdropImage ?? undefined}
+              className="absolute inset-0 h-full w-full object-contain bg-black"
+              autoPlay
+              controls
+              playsInline
+            />
+          ) : media.backdropImage ? (
+            <img
+              src={media.backdropImage}
+              alt={media.title}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : null}
         </div>
 
         <div className="px-6 py-5 space-y-4 overflow-y-auto">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-white">
-            {trailer.title}
+            {media.title}
           </h2>
-          <p className="text-base text-orange-400 font-semibold">{trailer.tagline}</p>
+          {media.tagline && (
+            <p className="text-base text-orange-400 font-semibold">{media.tagline}</p>
+          )}
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/85">
-            <span>{trailer.year}</span>
-            <span className="border border-white/40 px-2 py-0.5 text-xs">{trailer.rating}</span>
-            <span className="text-white/70">{trailer.genres.join(" · ")}</span>
+            {media.year && <span>{media.year}</span>}
+            {media.rating && (
+              <span className="border border-white/40 px-2 py-0.5 text-xs">{media.rating}</span>
+            )}
+            {media.genres.length > 0 && (
+              <span className="text-white/70">{media.genres.join(" · ")}</span>
+            )}
           </div>
-          <p className="text-sm text-muted-foreground leading-relaxed">{trailer.description}</p>
+          {media.description && (
+            <p className="text-sm text-muted-foreground leading-relaxed">{media.description}</p>
+          )}
           <div className="flex flex-wrap gap-3">
             {!user ? (
               <Button asChild className="bg-white text-black hover:bg-white/90 font-bold">
@@ -80,7 +104,7 @@ const TrailerModal = ({ trailer, onClose }: TrailerModalProps) => {
             ) : canWatch ? (
               <Button
                 className="bg-white text-black hover:bg-white/90 font-bold"
-                onClick={() => navigate(`/bazinga-tv/watch/${trailer.id}`)}
+                onClick={() => navigate(`/bazinga-tv/watch/${media.slug}`)}
               >
                 <Play className="h-4 w-4 fill-current" /> {t("modal.play")}
               </Button>

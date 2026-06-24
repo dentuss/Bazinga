@@ -15,6 +15,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Wishlist from "./pages/Wishlist";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
+import { AdminMediaList, AdminMediaForm } from "./pages/AdminMedia";
 import Profile from "./pages/Profile";
 import News from "./pages/News";
 import BazingaUnlimited from "./pages/BazingaUnlimited";
@@ -259,6 +260,9 @@ const App = () => (
                 />
 
                 <Route path="/admin" element={<Admin />} />
+                <Route path="/admin/media" element={<AdminMediaList />} />
+                <Route path="/admin/media/new" element={<AdminMediaForm />} />
+                <Route path="/admin/media/:id/edit" element={<AdminMediaForm />} />
                 <Route path="/news" element={<News />} />
                 <Route path="/about-bazinga" element={<AboutBazinga />} />
                 <Route path="/faqs" element={<Faqs />} />

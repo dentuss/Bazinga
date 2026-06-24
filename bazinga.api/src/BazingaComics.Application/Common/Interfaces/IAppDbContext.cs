@@ -35,6 +35,9 @@ public interface IAppDbContext
     DbSet<Report> Reports { get; }
     DbSet<ReportCategory> ReportCategories { get; }
     DbSet<NewsPost> NewsPosts { get; }
+    DbSet<MediaItem> MediaItems { get; }
+    DbSet<MediaSeason> MediaSeasons { get; }
+    DbSet<MediaEpisode> MediaEpisodes { get; }
 
     /// <summary>Low-level DB access (transactions) used by a couple of admin flows.</summary>
     DatabaseFacade Database { get; }

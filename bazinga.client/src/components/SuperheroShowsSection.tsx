@@ -4,12 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Check, ChevronLeft, ChevronRight, Loader2, Play, Plus, Sparkles } from "lucide-react";
 import ShowModal from "@/components/ShowModal";
+import MediaRailCard from "@/components/MediaRailCard";
 import {
   fetchSuperheroShows,
   showMetaLine,
   showSubtitle,
   type SuperheroShowDto,
 } from "@/lib/metadata";
+import type { MediaItem } from "@/lib/media";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCollections } from "@/contexts/CollectionsContext";
 import { hasTVAccess } from "@/lib/access";
@@ -23,7 +25,13 @@ const scrollRail = (dir: -1 | 1) => () => {
   el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior: "smooth" });
 };
 
-const SuperheroShowsSection = () => {
+interface SuperheroShowsSectionProps {
+  /** DB-backed media items rendered as Originals chips at the head of the
+   * rail so admin-added shows always sit in front of the TVMaze cards. */
+  originals?: MediaItem[];
+}
+
+const SuperheroShowsSection = ({ originals = [] }: SuperheroShowsSectionProps) => {
   const { t } = useTranslation();
   const [selected, setSelected] = useState<SuperheroShowDto | null>(null);
   const { data = [], isLoading } = useQuery({
@@ -71,15 +79,22 @@ const SuperheroShowsSection = () => {
           className="grid grid-rows-2 grid-flow-col auto-cols-max gap-x-3 gap-y-4 md:gap-x-4 overflow-x-auto px-4 md:px-8 pb-10 pt-10 scroll-smooth no-scrollbar"
           style={{ scrollbarWidth: "none" }}
         >
-          {isLoading ? (
+          {isLoading && originals.length === 0 ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground px-4">
               <Loader2 className="h-4 w-4 animate-spin" />
               {t("series.loading")}
             </div>
-          ) : data.length === 0 ? (
+          ) : data.length === 0 && originals.length === 0 ? (
             <p className="px-4 text-sm text-muted-foreground">{t("series.noneFound")}</p>
           ) : (
-            data.map((show) => <ShowCard key={show.id} show={show} onSelect={setSelected} />)
+            <>
+              {originals.map((m) => (
+                <MediaRailCard key={`m-${m.id}`} item={m} />
+              ))}
+              {data.map((show) => (
+                <ShowCard key={show.id} show={show} onSelect={setSelected} />
+              ))}
+            </>
           )}
         </div>
       </div>

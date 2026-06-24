@@ -127,6 +127,7 @@ const uk = {
     animeUniverse: "Всесвіт аніме",
     animeUniverseFiltered: "Всесвіт аніме · фільтровано",
     newNoteworthy: "Нове та помітне",
+    movies: "Bazinga Фільми",
     exploreAll: "Усі",
     newEpisodes: "Нові епізоди",
     episode: "Епізод",
@@ -394,6 +395,12 @@ const uk = {
     title: "404",
     body: "Ой! Сторінку не знайдено",
     home: "На головну",
+  },
+  comingSoon: {
+    label: "Скоро",
+    title: "Цей контент ще недоступний",
+    body: "Ми ще працюємо над тим, щоб додати його на Bazinga. Поки що перегляньте каталог.",
+    backToTv: "Назад до BazingaTV",
   },
   selector: {
     title: "Хто дивиться?",
