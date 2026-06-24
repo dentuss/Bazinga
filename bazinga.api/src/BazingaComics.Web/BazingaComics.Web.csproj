@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>BazingaComics.Web</RootNamespace>
+    <AssemblyName>BazingaComics.Web</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!--
+    Web layer — the composition root and the only HTTP-aware project. Holds the
+    controllers, authentication/authorization wiring, Swagger and the request
+    pipeline. It references Application (DTOs, ports, IAppDbContext) and
+    Infrastructure (to call AddInfrastructure and bind the implementations).
+    EF Core is referenced directly so controllers can use its IQueryable
+    extension methods against the IAppDbContext seam.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BazingaComics.Application\BazingaComics.Application.csproj" />
+    <ProjectReference Include="..\BazingaComics.Infrastructure\BazingaComics.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

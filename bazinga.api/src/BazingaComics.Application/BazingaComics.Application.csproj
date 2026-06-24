@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>BazingaComics.Application</RootNamespace>
+    <AssemblyName>BazingaComics.Application</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    Application layer — use-case orchestration surface. Holds DTOs, the port
+    interfaces every external capability is consumed through (IAppDbContext,
+    IJwtService, IEmailSender, IBillingService, the metadata providers…), the
+    pure business services (PricingService) and options POCOs.
+
+    It depends only on Domain. The single framework dependency is EF Core, and
+    only so IAppDbContext can expose DbSet<T> — the persistence-ignorant seam
+    that lets the Web layer query without referencing the concrete DbContext.
+    This mirrors the widely used Clean Architecture reference template.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BazingaComics.Domain\BazingaComics.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

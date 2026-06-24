@@ -13,18 +13,40 @@ Spring Boot backend while preserving the same HTTP API contract.
 - CORS configured per environment
 - Background `NewsCleanupService` purges expired news hourly
 
-## Projects
+## Architecture (Clean Architecture)
 
-- `BazingaComics.Api` — web API
-- `BazingaComics.Tests` — xUnit tests
+Four projects with dependencies pointing strictly inward
+(`Web → Infrastructure → Application → Domain`):
+
+```
+src/
+  BazingaComics.Domain          entities + enums, zero dependencies
+  BazingaComics.Application      DTOs, port interfaces (IAppDbContext, IJwtService,
+                                IEmailSender, IBillingService, the metadata ports),
+                                pure business services (PricingService), options
+  BazingaComics.Infrastructure  EF Core DbContext (implements IAppDbContext),
+                                MySQL, JWT, BCrypt, SMTP, Stripe, Jikan/Superhero/
+                                Open Library clients, background services,
+                                AddInfrastructure() composition module
+  BazingaComics.Web             controllers, auth/CORS/Swagger, Program.cs
+                                (composition root)
+tests/
+  BazingaComics.Tests           xUnit tests (Application + Infrastructure)
+```
+
+The Web layer queries through the Application-owned `IAppDbContext` seam rather
+than the concrete `AppDbContext`, so persistence stays an Infrastructure detail.
 
 ## Running locally
 
 ```bash
-cd bazingaBE
+cd bazinga.api
 dotnet restore
-dotnet run --project BazingaComics.Api
+dotnet run --project src/BazingaComics.Web
 ```
+
+Or run the whole stack (DB + API + SPA) from the repo root with
+`docker compose up --build`.
 
 The app listens on `http://localhost:8080`, serves Swagger at `/swagger`, and
 calls `DbContext.EnsureCreated()` at startup to provision the schema in an
@@ -44,12 +66,10 @@ Environment variable overrides:
 
 ## Schema / migrations
 
-On first run, `Database.EnsureCreated()` creates the schema from the EF Core
-model. For teams that prefer real migrations, run
-`dotnet ef migrations add InitialCreate --project BazingaComics.Api` and switch
-`Program.cs` to `db.Database.Migrate()`. A raw SQL reference script lives at
-`BazingaComics.Api/Data/init.sql` (mirrors the original Flyway V1 plus the
-`news_posts` table and subscription columns).
+On first run, `DbInitializer.Initialize()` (Infrastructure) calls
+`Database.EnsureCreated()` and idempotently forward-patches older databases. A
+raw SQL reference script lives at
+`src/BazingaComics.Infrastructure/Persistence/init.sql`.
 
 ## HTTP API
 

@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>BazingaComics.Infrastructure</RootNamespace>
+    <AssemblyName>BazingaComics.Infrastructure</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    Infrastructure layer — concrete implementations of the Application ports:
+    the EF Core DbContext (implements IAppDbContext), MySQL provider, JWT,
+    BCrypt, SMTP, Stripe, the Jikan/Superhero/Open Library HTTP clients and the
+    background cleanup service. All the "messy" framework + third-party deps
+    live here, behind interfaces the inner layers own.
+  -->
+
+  <ItemGroup>
+    <!-- Persistence -->
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0-preview.1.efcore.9.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+
+    <!-- Identity / security -->
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.1" />
+
+    <!-- External integrations -->
+    <PackageReference Include="MailKit" Version="4.8.0" />
+    <PackageReference Include="Stripe.net" Version="47.0.0" />
+
+    <!-- Extension surfaces not part of the base library SDK -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BazingaComics.Application\BazingaComics.Application.csproj" />
+    <ProjectReference Include="..\BazingaComics.Domain\BazingaComics.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

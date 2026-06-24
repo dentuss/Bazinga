@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>BazingaComics.Domain</RootNamespace>
+    <AssemblyName>BazingaComics.Domain</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    Domain layer — the innermost ring of the Clean Architecture. Pure entities,
+    enums and domain rules only. It has ZERO project or third-party references,
+    so nothing the business depends on can leak persistence/framework concerns
+    inward. Every other layer points here; this one points at nobody.
+  -->
+
+</Project>

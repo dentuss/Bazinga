@@ -1,142 +1,134 @@
-# Bazinga Deployment (Docker Compose)
+# Bazinga deployment — AWS EC2 + Docker Compose + HTTPS
 
-The pipeline builds two Docker images per branch (API + client), pushes them to
-the GitLab Container Registry, then SSHes to the target server and runs
-`docker compose pull && up -d` against `docker-compose.yml`.
+Production runs as a Docker Compose stack on a single EC2 host, behind an nginx
+edge that terminates TLS with free, auto-renewing Let's Encrypt certificates.
+MySQL is **AWS RDS** (managed), so there is no database container.
 
 ```
-push to main  ->  build_api_main, build_client_main  ->  deploy_main  (port 80,   /var/www/bazinga-prod)
-push to dev   ->  build_api_dev,  build_client_dev   ->  deploy_dev   (port 8080, /var/www/bazinga-dev)
+                         ┌────────────────────────── EC2 host ──────────────────────────┐
+  Internet ── :443 ───▶  │  nginx (TLS, Let's Encrypt)  ──┬──▶ client  (SPA static)      │
+            ── :80  ───▶  │   └─ http→https redirect       └──▶ api     (:8080, .NET)     │
+                         │  certbot (auto-renew sidecar)                                  │
+                         └───────────────────────────────────────────┬───────────────────┘
+                                                                      │ TLS (3306)
+                                                            AWS RDS for MySQL (managed)
 ```
 
-The same `docker-compose.yml` is used for both environments. The deploy job
-writes a fresh `.env` next to it on the server with the right image tags and
-port, so prod and dev are isolated by `COMPOSE_PROJECT_NAME` and live as two
-independent compose stacks.
+Images are built in CI and **pulled** on the host — nothing is built in
+production. The app is served on one HTTPS origin: the SPA at `/`, the API
+under `/api/` (the frontend calls the API with same-origin relative paths).
 
-## One-time GitLab setup
+## Files
 
-### 1. Enable the Container Registry on your GitLab instance
+| Path | Purpose |
+|------|---------|
+| `docker-compose.yml` | Production stack: `api`, `client`, `nginx`, `certbot`. |
+| `.env.example` | Template for `.env` (domain, RDS connection string, secrets, image tags). |
+| `nginx/templates/default.conf.template` | Edge config; `${DOMAIN}` filled in at container start. |
+| `nginx/dev.conf` | Plain-HTTP edge used by the **local** stack (`../docker-compose.yml`). |
+| `scripts/bootstrap-ec2.sh` | Installs Docker + compose plugin on a fresh host. |
+| `scripts/init-letsencrypt.sh` | One-time TLS issuance. |
+| `scripts/deploy.sh` | Pull images + (re)start the stack. |
 
-If your self-hosted GitLab does not yet have the registry enabled, edit
-`/etc/gitlab/gitlab.rb`:
+---
 
-```ruby
-registry_external_url 'https://gitlab.gitlab-servak:5050'
-```
+## 1. AWS prerequisites
 
-Then `sudo gitlab-ctl reconfigure`. Verify in the project: *Deploy -> Container
-Registry* should be visible.
+1. **EC2 instance** — Amazon Linux 2023 or Ubuntu 22.04+, t3.small or larger.
+   Security group inbound: **TCP 22** (your IP), **TCP 80** and **TCP 443**
+   (0.0.0.0/0).
+2. **Elastic IP** associated with the instance (so the DNS record is stable).
+3. **DNS** — an `A` record for `your-domain.com` (and `www`) pointing at the
+   Elastic IP. TLS issuance fails until this resolves publicly.
+4. **RDS for MySQL** — a MySQL 8.x instance. Put it in the **same VPC** as the
+   EC2 host and allow inbound **3306** from the EC2 instance's security group
+   (not from the world). Create the database and an app user:
+   ```sql
+   CREATE DATABASE bazinga CHARACTER SET utf8mb4;
+   CREATE USER 'bazinga_app'@'%' IDENTIFIED BY 'a-strong-password';
+   GRANT ALL PRIVILEGES ON bazinga.* TO 'bazinga_app'@'%';
+   FLUSH PRIVILEGES;
+   ```
+   The schema itself is created automatically on first API start.
 
-### 2. Configure the GitLab Runner for Docker-in-Docker
-
-Add to `/etc/gitlab-runner/config.toml` under `[runners.docker]`:
-
-```toml
-privileged = true
-volumes = ["/certs/client", "/cache"]
-```
-
-Restart: `sudo systemctl restart gitlab-runner`. This is required so the
-runner can build images via `docker:24-dind`.
-
-### 3. CI/CD variables (Project -> Settings -> CI/CD -> Variables)
-
-| Key               | Value                                              | Protected | Masked |
-|-------------------|----------------------------------------------------|-----------|--------|
-| `SSH_PRIVATE_KEY` | content of the deploy SSH private key (full file)  | off       | off    |
-| `DEPLOY_HOST`     | `gitlab.gitlab-servak` or its IP                   | off       | off    |
-| `DEPLOY_USER`     | `deploy`                                           | off       | off    |
-
-`Protected: off` is important - otherwise the variables are not exposed on the
-`dev` branch.
-
-## One-time server setup (the GitLab VM)
-
-### 4. Install Docker
+## 2. Provision the host (once)
 
 ```bash
-curl -fsSL https://get.docker.com | sudo sh
-sudo systemctl enable --now docker
+# copy this repo's deploy/ dir to the host, e.g. /opt/bazinga/deploy, then:
+cd /opt/bazinga/deploy
+sudo ./scripts/bootstrap-ec2.sh
+# log out/in so your user is in the docker group
 ```
 
-### 5. Create the deploy user
+## 3. Configure
 
 ```bash
-sudo useradd -m -s /bin/bash deploy
-sudo usermod -aG docker deploy
-sudo mkdir -p /var/www/bazinga-prod /var/www/bazinga-dev
-sudo chown -R deploy:deploy /var/www/bazinga-prod /var/www/bazinga-dev
+cp .env.example .env
+nano .env   # set DOMAIN, LETSENCRYPT_EMAIL, DB_CONNECTION_STRING, JWT_SECRET,
+            # API_IMAGE / CLIENT_IMAGE, and (optionally) SMTP + Stripe keys
 ```
 
-### 6. SSH key for CI
+Generate a strong JWT secret with `openssl rand -base64 48`.
 
-On any local machine:
+## 4. Authenticate to the image registry
+
+Pull access for the images named in `.env` (`API_IMAGE` / `CLIENT_IMAGE`):
 
 ```bash
-ssh-keygen -t ed25519 -f gitlab_ci_key -N ""
-ssh-copy-id -i gitlab_ci_key.pub deploy@gitlab.gitlab-servak
+# GitHub Container Registry
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <user> --password-stdin
+# …or Amazon ECR
+aws ecr get-login-password --region <region> \
+  | docker login --username AWS --password-stdin <acct>.dkr.ecr.<region>.amazonaws.com
 ```
 
-Copy the **private key** content into the `SSH_PRIVATE_KEY` CI variable.
-
-### 7. Trust the GitLab registry from the server
-
-The registry on `gitlab.gitlab-servak:5050` likely uses a self-signed cert.
-Either install the CA into Docker:
+## 5. Issue certificates + go live
 
 ```bash
-sudo mkdir -p /etc/docker/certs.d/gitlab.gitlab-servak:5050
-sudo cp /path/to/gitlab.crt /etc/docker/certs.d/gitlab.gitlab-servak:5050/ca.crt
-sudo systemctl restart docker
+./scripts/init-letsencrypt.sh   # one-time: dummy cert → nginx up → real cert
+./scripts/deploy.sh             # pull images + start the full stack
 ```
 
-Or, for a lab environment, mark it as insecure in `/etc/docker/daemon.json`:
+Visit `https://your-domain.com` — it should load over a trusted certificate,
+with HTTP redirecting to HTTPS. Renewals happen automatically (the `certbot`
+sidecar renews; `nginx` reloads every 6h).
 
-```json
-{
-  "insecure-registries": ["gitlab.gitlab-servak:5050"]
-}
-```
+> Tip: while testing, set `CERTBOT_STAGING=1` in `.env` to use Let's Encrypt's
+> staging CA and avoid the production rate limits, then flip to `0` and re-run
+> `init-letsencrypt.sh` for a trusted cert.
+
+## 6. Redeploying new versions
+
+CI pushes new images; on the host just:
 
 ```bash
-sudo systemctl restart docker
+cd /opt/bazinga/deploy && ./scripts/deploy.sh
 ```
 
-## Trigger the pipeline
+(or wire CI to SSH in and run it — see `.github/workflows/`).
+
+## Operations
 
 ```bash
-git push origin main   # triggers build_*_main + deploy_main
-git push origin dev    # triggers build_*_dev  + deploy_dev
+docker compose ps                 # what's running
+docker compose logs -f api        # backend logs
+docker compose logs -f nginx      # edge / TLS logs
+docker compose exec nginx nginx -s reload
+docker compose down               # stop everything (RDS data is untouched)
 ```
 
-After both pipelines turn green:
+### TLS troubleshooting
+- `init-letsencrypt.sh` fails with a challenge error → DNS isn't pointing at the
+  host yet, or port 80 is blocked by the security group.
+- Cert renews but the browser still shows the old one → `docker compose exec
+  nginx nginx -s reload`.
 
-- production: `http://gitlab.gitlab-servak/`
-- staging:    `http://gitlab.gitlab-servak:8080/`
+## Local development
 
-## Useful commands on the server
+From the repo root (not this dir):
 
 ```bash
-# what is running
-cd /var/www/bazinga-prod && docker compose ps
-cd /var/www/bazinga-dev  && docker compose ps
-
-# logs
-docker compose logs -f api
-docker compose logs -f client
-
-# manual restart
-docker compose restart
-
-# stop everything
-docker compose down
+docker compose up --build   # db + api + client + http proxy → http://localhost:8080
 ```
 
-## Screenshots for the report
-
-1. *Build -> Pipelines* with two green pipelines (`main` + `dev`)
-2. Each pipeline opened, showing build_* + deploy_* jobs all green
-3. *Deploy -> Container Registry* showing pushed images (`api:main`, `client:main`, `api:dev`, `client:dev`)
-4. *Operate -> Environments* with `production` and `staging` and their URLs
-5. On the server: `docker compose ps` output for both stacks, and `curl -I http://localhost/` and `curl -I http://localhost:8080/` returning 200
+or run the API and `npm run dev` (the Vite dev server proxies `/api` → `:8080`).

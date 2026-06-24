@@ -1,0 +1,3 @@
+# Never commit real secrets or issued certificates.
+.env
+certbot/
