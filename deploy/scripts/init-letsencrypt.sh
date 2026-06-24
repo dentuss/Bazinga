@@ -28,14 +28,10 @@ RSA_KEY_SIZE=4096
 
 mkdir -p "$DATA/conf" "$DATA/www"
 
-# Recommended TLS params used by the nginx 443 server.
-if [ ! -e "$DATA/conf/options-ssl-nginx.conf" ] || [ ! -e "$DATA/conf/ssl-dhparams.pem" ]; then
-  echo "### Downloading recommended TLS parameters ..."
-  curl -fsSL https://raw.githubusercontent.com/certbot/certbot/main/certbot-nginx/src/certbot_nginx/_internal/tls_configs/options-ssl-nginx.conf \
-    > "$DATA/conf/options-ssl-nginx.conf"
-  curl -fsSL https://raw.githubusercontent.com/certbot/certbot/main/certbot/ssl-dhparams.pem \
-    > "$DATA/conf/ssl-dhparams.pem"
-fi
+# NOTE: we no longer download options-ssl-nginx.conf / ssl-dhparams.pem from
+# githubusercontent — that path 404'd when certbot reorganised its repo. The
+# TLS hardening is now inlined directly in nginx/templates/default.conf.template
+# (ECDHE-only, so no dhparam file is required).
 
 LIVE="$DATA/conf/live/$DOMAIN"
 echo "### Creating a throwaway certificate for $DOMAIN ..."
