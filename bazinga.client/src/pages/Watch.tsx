@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -7,118 +7,39 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  Loader2,
   Pause,
   Play,
   SkipForward,
 } from "lucide-react";
-import {
-  buildWatchEntry,
-  getCuratedEntry,
-  type Episode,
-  type WatchEntry,
-} from "@/data/episodeCatalogue";
-import { getTrailer } from "@/data/trailers";
-import { fetchAnime, fetchSuperheroShow, stripHtml } from "@/lib/metadata";
+import { Button } from "@/components/ui/button";
+import { fetchMediaBySlug, type MediaEpisode, type MediaItem } from "@/lib/media";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasTVAccess } from "@/lib/access";
 import { cn } from "@/lib/utils";
 
-type PlaybackKind = "trailer" | "anime" | "show" | null;
-
-const parseId = (raw: string | undefined): { kind: PlaybackKind; key: string | null } => {
-  if (!raw) return { kind: null, key: null };
-  if (raw.startsWith("anime-")) return { kind: "anime", key: raw.slice("anime-".length) };
-  if (raw.startsWith("show-")) return { kind: "show", key: raw.slice("show-".length) };
-  return { kind: "trailer", key: raw };
-};
-
+/**
+ * Watch page — the source of truth is now /api/media/{slug}. Legacy id shapes
+ * (anime-X / show-X) come from rail cards backed by external metadata (Jikan
+ * / TVMaze) that may have no DB row yet; when the slug doesn't resolve we
+ * show a friendly "coming soon" upsell instead of bouncing the user.
+ */
 const Watch = () => {
-  const { id } = useParams();
+  const { id: slug } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { user } = useAuth();
   const canWatch = hasTVAccess(user?.subscriptionType);
-  const { kind, key } = useMemo(() => parseId(id), [id]);
 
-  // ---- Source-of-truth catalogue --------------------------------------------
-  // Trailer ids resolve immediately. Anime/Show ids fetch metadata so the
-  // synthesized episode list carries the real title + description.
-
-  const animeQuery = useQuery({
-    queryKey: ["watch-anime", key],
-    queryFn: () => fetchAnime(Number(key)),
-    enabled: kind === "anime" && !!key,
-    staleTime: 15 * 60 * 1000,
+  const mediaQuery = useQuery({
+    queryKey: ["media", "detail", slug],
+    queryFn: () => fetchMediaBySlug(slug!),
+    enabled: !!slug,
+    retry: false,
+    staleTime: 5 * 60 * 1000,
   });
 
-  const showQuery = useQuery({
-    queryKey: ["watch-show", key],
-    queryFn: () => fetchSuperheroShow(Number(key)),
-    enabled: kind === "show" && !!key,
-    staleTime: 15 * 60 * 1000,
-  });
-
-  const entry: WatchEntry | null = useMemo(() => {
-    if (kind === "trailer" && key) {
-      const trailer = getTrailer(key);
-      if (!trailer) return null;
-      const curated = getCuratedEntry(`trailer-${key}`);
-      if (curated) return curated;
-      // Trailer without curated episodes: build a single-episode entry.
-      return {
-        id: `trailer-${key}`,
-        title: trailer.title,
-        tagline: trailer.tagline,
-        description: trailer.description,
-        year: trailer.year,
-        rating: trailer.rating,
-        genres: trailer.genres,
-        seasons: [
-          {
-            number: 1,
-            episodes: [
-              {
-                number: 1,
-                title: trailer.title,
-                description: trailer.description,
-                runtimeMinutes: 0,
-                src: trailer.src,
-              },
-            ],
-          },
-        ],
-      };
-    }
-    if (kind === "anime" && animeQuery.data) {
-      const a = animeQuery.data;
-      return buildWatchEntry({
-        id: `anime-${a.malId}`,
-        title: a.titleEnglish ?? a.title,
-        description: a.synopsis ?? "",
-        backdrop: a.trailerImageUrl ?? a.largeImageUrl ?? a.imageUrl ?? undefined,
-        year: a.year ?? undefined,
-        rating: a.rating ?? undefined,
-        genres: a.genres,
-        totalEpisodes: a.episodes ?? 8,
-      });
-    }
-    if (kind === "show" && showQuery.data) {
-      const s = showQuery.data;
-      return buildWatchEntry({
-        id: `show-${s.id}`,
-        title: s.name,
-        description: stripHtml(s.summary) || "",
-        backdrop: s.imageOriginal ?? s.imageMedium ?? undefined,
-        year: s.premiered ? Number(s.premiered.slice(0, 4)) : undefined,
-        rating: s.rating ? `★ ${s.rating.toFixed(1)}` : undefined,
-        genres: s.genres,
-        totalEpisodes: 12,
-      });
-    }
-    return null;
-  }, [kind, key, animeQuery.data, showQuery.data]);
-
-  // ---- Episode state ---------------------------------------------------------
+  // ---- Episode navigation state (reset whenever the media item changes) ----
   const [seasonIndex, setSeasonIndex] = useState(0);
   const [episodeIndex, setEpisodeIndex] = useState(0);
   const [autoplay, setAutoplay] = useState(true);
@@ -129,19 +50,19 @@ const Watch = () => {
   useEffect(() => {
     setSeasonIndex(0);
     setEpisodeIndex(0);
-  }, [entry?.id]);
+  }, [mediaQuery.data?.id]);
 
+  const entry: MediaItem | undefined = mediaQuery.data;
   const season = entry?.seasons[seasonIndex];
-  const episode: Episode | undefined = season?.episodes[episodeIndex];
+  const episode: MediaEpisode | undefined = season?.episodes[episodeIndex];
 
   const advanceEpisode = () => {
     if (!entry) return;
-    const currentSeason = entry.seasons[seasonIndex];
-    if (currentSeason && episodeIndex + 1 < currentSeason.episodes.length) {
+    const current = entry.seasons[seasonIndex];
+    if (current && episodeIndex + 1 < current.episodes.length) {
       setEpisodeIndex((i) => i + 1);
       return;
     }
-    // Next season's first episode if available.
     if (seasonIndex + 1 < entry.seasons.length) {
       setSeasonIndex((s) => s + 1);
       setEpisodeIndex(0);
@@ -168,52 +89,41 @@ const Watch = () => {
     }
   };
 
-  // ---- Render ----------------------------------------------------------------
-
-  // Gate deep-links so a Comics-only user typing /bazinga-tv/watch/anime-X
-  // into the address bar lands on the subscription page instead of the player.
-  // Auth itself is enforced by RequireProfile in App.tsx so user is non-null.
+  // ---- Render --------------------------------------------------------------
+  // Auth + subscription gates first; the route is wrapped in RequireProfile
+  // already, but a TV-only deep link is still possible and needs to bounce.
   if (!user) return <Navigate to="/auth" replace />;
   if (!canWatch) return <Navigate to="/bazinga-unlimited" replace />;
 
-  if (kind === null || !key) {
+  if (!slug) return <Navigate to="/bazinga-tv" replace />;
+
+  if (mediaQuery.isLoading) {
     return (
       <div className="fixed inset-0 z-[90] grid place-items-center bg-black text-white">
-        <div className="text-center space-y-4">
-          <p className="text-lg font-semibold">Trailer not found.</p>
-          <button
-            type="button"
-            onClick={() => navigate("/bazinga-tv")}
-            className="text-orange-500 hover:text-orange-400 underline"
-          >
-            Back to BazingaTV
-          </button>
-        </div>
+        <p className="text-sm text-white/70 inline-flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {t("manga.loading")}
+        </p>
       </div>
     );
   }
 
-  const loading = (kind === "anime" && animeQuery.isLoading) || (kind === "show" && showQuery.isLoading);
-  if (loading || !entry || !episode) {
-    return (
-      <div className="fixed inset-0 z-[90] grid place-items-center bg-black text-white">
-        <p className="text-sm text-white/70">Loading…</p>
-      </div>
-    );
+  // Unknown slug, or known item but no episodes have been added yet — show
+  // a friendly "coming soon" surface instead of a broken player. This is also
+  // the fallback for legacy anime-X / show-X cards backed by external metadata
+  // that the admin hasn't promoted into the DB.
+  if (!entry || !season || !episode) {
+    return <ComingSoon title={slug} />;
   }
 
   return (
     <div className="fixed inset-0 z-[90] bg-black text-white flex flex-col">
-      {/* Video player — flex-1 grows to fill the viewport minus the control
-         panel below. The Back / Now Playing chips are the only overlays on
-         the video itself; the meta + episode navigation moved into a sibling
-         strip so the native HTML5 controls are never obscured. */}
       <div className="relative flex-1 min-h-0 bg-black">
         <video
           ref={videoRef}
           key={`${entry.id}-s${seasonIndex}-e${episodeIndex}`}
-          src={episode.src}
-          poster={entry.backdrop}
+          src={episode.videoUrl}
+          poster={episode.thumbnail ?? entry.backdropImage ?? undefined}
           className="h-full w-full object-contain bg-black"
           autoPlay={playing}
           controls
@@ -225,7 +135,6 @@ const Watch = () => {
           }}
         />
 
-        {/* Top chips */}
         <div className="absolute top-0 left-0 right-0 z-10 px-4 py-3 flex items-start justify-between pointer-events-none">
           <button
             type="button"
@@ -247,23 +156,22 @@ const Watch = () => {
         </div>
       </div>
 
-      {/* Persistent control strip — sits BELOW the video so it never overlaps
-         the native player controls. Episode meta on the left, navigation on
-         the right. The episode drawer opens beneath this strip. */}
       <div className="shrink-0 border-t border-white/10 bg-card/95 backdrop-blur">
         <div className="container mx-auto px-4 md:px-8 py-3 md:py-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="min-w-0 flex-1">
               <p className="text-[11px] uppercase tracking-[0.3em] text-orange-400">
-                {t("episodes.season")} {season?.number} ·{" "}
+                {t("episodes.season")} {season.number} ·{" "}
                 {t("episodes.episodeNum", { n: episode.number })}
               </p>
               <h2 className="text-lg md:text-2xl font-black tracking-tight truncate">
                 {episode.title}
               </h2>
-              <p className="mt-0.5 text-xs md:text-sm text-white/70 max-w-2xl line-clamp-1 md:line-clamp-2">
-                {episode.description}
-              </p>
+              {episode.description && (
+                <p className="mt-0.5 text-xs md:text-sm text-white/70 max-w-2xl line-clamp-1 md:line-clamp-2">
+                  {episode.description}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <button
@@ -308,7 +216,6 @@ const Watch = () => {
         </div>
       </div>
 
-      {/* Episode picker drawer — slides up from below */}
       {pickerOpen && (
         <div className="border-t border-white/10 bg-card max-h-[55vh] overflow-y-auto">
           <div className="container mx-auto px-4 md:px-8 py-6 space-y-6">
@@ -316,7 +223,7 @@ const Watch = () => {
               <div className="flex flex-wrap gap-2">
                 {entry.seasons.map((s, i) => (
                   <button
-                    key={s.number}
+                    key={s.id}
                     type="button"
                     onClick={() => setSeasonIndex(i)}
                     className={cn(
@@ -332,11 +239,11 @@ const Watch = () => {
               </div>
             )}
             <ul className="grid gap-2">
-              {season?.episodes.map((ep, i) => {
+              {season.episodes.map((ep, i) => {
                 const isCurrent = i === episodeIndex;
                 const isPast = i < episodeIndex;
                 return (
-                  <li key={ep.number}>
+                  <li key={ep.id}>
                     <button
                       type="button"
                       onClick={() => {
@@ -363,15 +270,17 @@ const Watch = () => {
                         {isPast && !isCurrent ? <CheckCircle2 className="h-4 w-4" /> : ep.number}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold truncate">
-                          {ep.title}
-                        </p>
-                        <p className="text-xs text-white/70 line-clamp-2">{ep.description}</p>
+                        <p className="font-bold truncate">{ep.title}</p>
+                        {ep.description && (
+                          <p className="text-xs text-white/70 line-clamp-2">{ep.description}</p>
+                        )}
                       </div>
-                      <span className="flex items-center gap-1 text-xs text-white/60 shrink-0">
-                        <Clock className="h-3 w-3" />
-                        {ep.runtimeMinutes} {t("episodes.duration")}
-                      </span>
+                      {ep.runtimeMinutes ? (
+                        <span className="flex items-center gap-1 text-xs text-white/60 shrink-0">
+                          <Clock className="h-3 w-3" />
+                          {ep.runtimeMinutes} {t("episodes.duration")}
+                        </span>
+                      ) : null}
                     </button>
                   </li>
                 );
@@ -380,6 +289,35 @@ const Watch = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+/**
+ * Friendly fallback for slugs that don't resolve (typo'd URL, or an anime/show
+ * card backed by external metadata that the admin hasn't promoted into the
+ * DB yet). Lets the user navigate back rather than dropping them on a 404.
+ */
+const ComingSoon = ({ title }: { title?: string }) => {
+  const { t } = useTranslation();
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black text-white">
+      <div className="max-w-md text-center space-y-5 px-6">
+        <p className="text-xs font-bold uppercase tracking-[0.4em] text-orange-400">
+          {t("comingSoon.label")}
+        </p>
+        <h1 className="text-3xl md:text-4xl font-black tracking-tight">
+          {title ?? t("comingSoon.title")}
+        </h1>
+        <p className="text-sm text-white/70 leading-relaxed">
+          {t("comingSoon.body")}
+        </p>
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <Button asChild variant="outline" className="border-white/30 text-white hover:bg-white/10">
+            <Link to="/bazinga-tv">{t("comingSoon.backToTv")}</Link>
+          </Button>
+        </div>
+      </div>
     </div>
   );
 };

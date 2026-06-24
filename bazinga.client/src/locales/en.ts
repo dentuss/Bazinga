@@ -395,6 +395,12 @@ const en = {
     body: "Oops! Page not found",
     home: "Return to Home",
   },
+  comingSoon: {
+    label: "Coming soon",
+    title: "This title isn't available yet",
+    body: "We're still bringing this one to Bazinga. Browse the catalogue while we sort out the streaming rights.",
+    backToTv: "Back to BazingaTV",
+  },
   selector: {
     title: "Who's watching?",
     subtitle: "Pick a profile to continue into the Bazinga universe.",
