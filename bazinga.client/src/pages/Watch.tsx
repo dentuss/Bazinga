@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -19,6 +19,8 @@ import {
 } from "@/data/episodeCatalogue";
 import { getTrailer } from "@/data/trailers";
 import { fetchAnime, fetchSuperheroShow, stripHtml } from "@/lib/metadata";
+import { useAuth } from "@/contexts/AuthContext";
+import { hasTVAccess } from "@/lib/access";
 import { cn } from "@/lib/utils";
 
 type PlaybackKind = "trailer" | "anime" | "show" | null;
@@ -34,6 +36,8 @@ const Watch = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canWatch = hasTVAccess(user?.subscriptionType);
   const { kind, key } = useMemo(() => parseId(id), [id]);
 
   // ---- Source-of-truth catalogue --------------------------------------------
@@ -166,6 +170,12 @@ const Watch = () => {
 
   // ---- Render ----------------------------------------------------------------
 
+  // Gate deep-links so a Comics-only user typing /bazinga-tv/watch/anime-X
+  // into the address bar lands on the subscription page instead of the player.
+  // Auth itself is enforced by RequireProfile in App.tsx so user is non-null.
+  if (!user) return <Navigate to="/auth" replace />;
+  if (!canWatch) return <Navigate to="/bazinga-unlimited" replace />;
+
   if (kind === null || !key) {
     return (
       <div className="fixed inset-0 z-[90] grid place-items-center bg-black text-white">
@@ -194,7 +204,10 @@ const Watch = () => {
 
   return (
     <div className="fixed inset-0 z-[90] bg-black text-white flex flex-col">
-      {/* Video player */}
+      {/* Video player — flex-1 grows to fill the viewport minus the control
+         panel below. The Back / Now Playing chips are the only overlays on
+         the video itself; the meta + episode navigation moved into a sibling
+         strip so the native HTML5 controls are never obscured. */}
       <div className="relative flex-1 min-h-0 bg-black">
         <video
           ref={videoRef}
@@ -212,8 +225,8 @@ const Watch = () => {
           }}
         />
 
-        {/* Top bar */}
-        <div className="absolute top-0 left-0 right-0 z-10 px-4 py-3 flex items-center justify-between pointer-events-none">
+        {/* Top chips */}
+        <div className="absolute top-0 left-0 right-0 z-10 px-4 py-3 flex items-start justify-between pointer-events-none">
           <button
             type="button"
             onClick={() => navigate(-1)}
@@ -223,7 +236,7 @@ const Watch = () => {
             <ArrowLeft className="h-5 w-5" />
             <span className="font-semibold">{t("episodes.backToShow")}</span>
           </button>
-          <div className="pointer-events-none text-right">
+          <div className="text-right">
             <p className="text-[10px] uppercase tracking-[0.3em] text-orange-400">
               {t("episodes.nowPlaying")}
             </p>
@@ -232,61 +245,64 @@ const Watch = () => {
             </p>
           </div>
         </div>
+      </div>
 
-        {/* Bottom episode strip */}
-        <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
-          <div className="bg-gradient-to-t from-black/95 via-black/70 to-transparent pt-12 pb-4">
-            <div className="container mx-auto px-4 md:px-8 pointer-events-auto">
-              <div className="flex items-end justify-between gap-3 flex-wrap">
-                <div className="min-w-0">
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-orange-400">
-                    {t("episodes.season")} {season?.number} · {t("episodes.episodeNum", { n: episode.number })}
-                  </p>
-                  <h2 className="text-2xl md:text-3xl font-black tracking-tight truncate">
-                    {episode.title}
-                  </h2>
-                  <p className="mt-1 text-sm text-white/80 max-w-2xl line-clamp-2">
-                    {episode.description}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => stepEpisode(-1)}
-                    className="rounded-full bg-white/10 hover:bg-white/20 px-3 py-2 text-xs font-bold inline-flex items-center gap-1"
-                  >
-                    <SkipForward className="h-4 w-4 rotate-180" />
-                    {t("episodes.prevEpisode")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => stepEpisode(1)}
-                    className="rounded-full bg-orange-500 text-black hover:bg-orange-400 px-3 py-2 text-xs font-bold inline-flex items-center gap-1"
-                  >
-                    <SkipForward className="h-4 w-4" />
-                    {t("episodes.nextEpisode")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAutoplay((v) => !v)}
-                    className={cn(
-                      "rounded-full px-3 py-2 text-xs font-bold inline-flex items-center gap-1",
-                      autoplay ? "bg-white/15 text-white" : "bg-white/5 text-white/70"
-                    )}
-                  >
-                    {autoplay ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 fill-current" />}
-                    {autoplay ? t("episodes.autoplayOn") : t("episodes.autoplayOff")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPickerOpen((p) => !p)}
-                    className="rounded-full bg-white/15 hover:bg-white/25 px-3 py-2 text-xs font-bold inline-flex items-center gap-1"
-                  >
-                    {t("episodes.title")}
-                    <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", pickerOpen && "rotate-180")} />
-                  </button>
-                </div>
-              </div>
+      {/* Persistent control strip — sits BELOW the video so it never overlaps
+         the native player controls. Episode meta on the left, navigation on
+         the right. The episode drawer opens beneath this strip. */}
+      <div className="shrink-0 border-t border-white/10 bg-card/95 backdrop-blur">
+        <div className="container mx-auto px-4 md:px-8 py-3 md:py-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-orange-400">
+                {t("episodes.season")} {season?.number} ·{" "}
+                {t("episodes.episodeNum", { n: episode.number })}
+              </p>
+              <h2 className="text-lg md:text-2xl font-black tracking-tight truncate">
+                {episode.title}
+              </h2>
+              <p className="mt-0.5 text-xs md:text-sm text-white/70 max-w-2xl line-clamp-1 md:line-clamp-2">
+                {episode.description}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => stepEpisode(-1)}
+                className="rounded-full bg-white/10 hover:bg-white/20 px-3 py-2 text-xs font-bold inline-flex items-center gap-1"
+              >
+                <SkipForward className="h-4 w-4 rotate-180" />
+                {t("episodes.prevEpisode")}
+              </button>
+              <button
+                type="button"
+                onClick={() => stepEpisode(1)}
+                className="rounded-full bg-orange-500 text-black hover:bg-orange-400 px-3 py-2 text-xs font-bold inline-flex items-center gap-1"
+              >
+                <SkipForward className="h-4 w-4" />
+                {t("episodes.nextEpisode")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAutoplay((v) => !v)}
+                className={cn(
+                  "rounded-full px-3 py-2 text-xs font-bold inline-flex items-center gap-1",
+                  autoplay ? "bg-white/15 text-white" : "bg-white/5 text-white/70"
+                )}
+              >
+                {autoplay ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+                {autoplay ? t("episodes.autoplayOn") : t("episodes.autoplayOff")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickerOpen((p) => !p)}
+                className="rounded-full bg-white/15 hover:bg-white/25 px-3 py-2 text-xs font-bold inline-flex items-center gap-1"
+              >
+                {t("episodes.title")}
+                <ChevronDown
+                  className={cn("h-3.5 w-3.5 transition-transform", pickerOpen && "rotate-180")}
+                />
+              </button>
             </div>
           </div>
         </div>

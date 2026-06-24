@@ -8,6 +8,7 @@ import { useCollections } from "@/contexts/CollectionsContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { resolveImageUrl } from "@/lib/images";
 import { fetchComicMeta } from "@/lib/metadata";
+import { hasComicsAccess } from "@/lib/access";
 
 interface ComicModalProps {
   isOpen: boolean;
@@ -27,11 +28,6 @@ interface ComicModalProps {
     metaId?: number;
   };
 }
-
-const hasComicsAccess = (subscriptionType?: string) => {
-  const sub = subscriptionType?.toLowerCase();
-  return sub === "comics" || sub === "unlimited" || sub === "premium" || sub === "trial";
-};
 
 /**
  * Comic detail popup, restyled to mirror MangaModal: split layout with the

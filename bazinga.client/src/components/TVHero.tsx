@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, Info, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Info, Play, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import TrailerModal from "@/components/TrailerModal";
 import { trailers } from "@/data/trailers";
+import { useAuth } from "@/contexts/AuthContext";
+import { hasTVAccess } from "@/lib/access";
 
 const MIN_CLIP_SECONDS = 10;
 const MAX_CLIP_SECONDS = 15;
@@ -12,12 +14,28 @@ const MAX_CLIP_SECONDS = 15;
 const TVHero = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canWatch = hasTVAccess(user?.subscriptionType);
   const [index, setIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const segmentEndRef = useRef<number>(Number.POSITIVE_INFINITY);
 
   const current = trailers[index];
+
+  // For signed-in users without a TV plan, the Play CTA pushes them into the
+  // upgrade flow instead of the player. Logged-out users go through auth first.
+  const handleHeroPlay = () => {
+    if (!user) {
+      navigate("/auth");
+      return;
+    }
+    if (!canWatch) {
+      navigate("/bazinga-unlimited");
+      return;
+    }
+    navigate(`/bazinga-tv/watch/${current.id}`);
+  };
 
   const advance = useCallback(() => {
     setIndex((i) => (i + 1) % trailers.length);
@@ -117,13 +135,23 @@ const TVHero = () => {
             {current.description}
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
-            <Button
-              size="lg"
-              className="bg-white text-black hover:bg-white/90 font-bold"
-              onClick={() => navigate(`/bazinga-tv/watch/${current.id}`)}
-            >
-              <Play className="h-5 w-5 fill-current" /> {t("modal.play")}
-            </Button>
+            {user && !canWatch ? (
+              <Button
+                size="lg"
+                className="bg-gradient-to-r from-primary to-orange-500 hover:opacity-90 text-white font-bold"
+                onClick={handleHeroPlay}
+              >
+                <Sparkles className="h-5 w-5" /> {t("header.joinNow")}
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                className="bg-white text-black hover:bg-white/90 font-bold"
+                onClick={handleHeroPlay}
+              >
+                <Play className="h-5 w-5 fill-current" /> {t("modal.play")}
+              </Button>
+            )}
             <Button
               size="lg"
               variant="outline"

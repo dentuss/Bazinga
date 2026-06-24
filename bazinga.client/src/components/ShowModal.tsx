@@ -1,10 +1,11 @@
-import { Check, Play, Plus, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Check, Play, Plus, Sparkles, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { showMetaLine, stripHtml, type SuperheroShowDto } from "@/lib/metadata";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCollections } from "@/contexts/CollectionsContext";
+import { hasTVAccess } from "@/lib/access";
 
 interface ShowModalProps {
   show: SuperheroShowDto;
@@ -17,11 +18,12 @@ interface ShowModalProps {
  * toggle is wired to the active profile's collection.
  */
 const ShowModal = ({ show, onClose }: ShowModalProps) => {
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const { isSaved, toggle } = useCollections();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const saved = isSaved("mylist", "show", String(show.id));
+  const canWatch = hasTVAccess(user?.subscriptionType);
 
   const handleToggle = () =>
     void toggle("mylist", {
@@ -85,12 +87,28 @@ const ShowModal = ({ show, onClose }: ShowModalProps) => {
             {stripHtml(show.summary) || t("modal.noSummary")}
           </p>
           <div className="flex flex-wrap gap-3">
-            <Button
-              className="bg-orange-500 text-black hover:bg-orange-600 font-bold"
-              onClick={handlePlay}
-            >
-              <Play className="h-4 w-4 fill-current" /> {t("modal.play")}
-            </Button>
+            {!user ? (
+              <Button asChild className="bg-orange-500 text-black hover:bg-orange-600 font-bold">
+                <Link to="/auth">{t("modal.signInToWatch")}</Link>
+              </Button>
+            ) : canWatch ? (
+              <Button
+                className="bg-orange-500 text-black hover:bg-orange-600 font-bold"
+                onClick={handlePlay}
+              >
+                <Play className="h-4 w-4 fill-current" /> {t("modal.play")}
+              </Button>
+            ) : (
+              <Button
+                asChild
+                className="bg-gradient-to-r from-primary to-orange-500 text-white font-bold"
+              >
+                <Link to="/bazinga-unlimited" onClick={onClose}>
+                  <Sparkles className="h-4 w-4" />
+                  {t("modal.subscribeToWatch")}
+                </Link>
+              </Button>
+            )}
             {token && (
               <Button
                 variant="outline"

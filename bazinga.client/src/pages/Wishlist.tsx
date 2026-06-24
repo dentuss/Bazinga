@@ -6,11 +6,7 @@ import Footer from "@/components/Footer";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { resolveImageUrl } from "@/lib/images";
-
-const hasComicsAccess = (subscriptionType?: string) => {
-  const sub = subscriptionType?.toLowerCase();
-  return sub === "comics" || sub === "unlimited" || sub === "premium";
-};
+import { hasComicsAccess } from "@/lib/access";
 
 const Wishlist = () => {
   const { items, removeFromWishlist } = useWishlist();

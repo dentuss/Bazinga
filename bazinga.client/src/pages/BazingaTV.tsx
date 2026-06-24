@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronDown,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import TVHeader from "@/components/TVHeader";
 import TVHero from "@/components/TVHero";
@@ -23,6 +24,7 @@ import {
 } from "@/lib/metadata";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCollections } from "@/contexts/CollectionsContext";
+import { hasTVAccess } from "@/lib/access";
 import { cn } from "@/lib/utils";
 import heroBanner1 from "@/assets/hero-banner-1.jpg";
 import heroBanner2 from "@/assets/hero-banner-2.jpg";
@@ -77,13 +79,22 @@ const AnimeCard = ({
   const seasons = seasonCount(show);
   const rating = ratingLabel(show);
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const { isSaved, toggle } = useCollections();
   const { t } = useTranslation();
   const saved = isSaved("mylist", "anime", String(show.malId));
+  const canWatch = hasTVAccess(user?.subscriptionType);
 
   const handlePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!user) {
+      navigate("/auth");
+      return;
+    }
+    if (!canWatch) {
+      navigate("/bazinga-unlimited");
+      return;
+    }
     navigate(`/bazinga-tv/watch/anime-${show.malId}`);
   };
 
@@ -137,14 +148,27 @@ const AnimeCard = ({
               {show.title}
             </p>
             <div className="flex items-center gap-1.5 mb-2">
-              <button
-                type="button"
-                onClick={handlePlay}
-                aria-label={t("modal.play")}
-                className="grid place-items-center h-7 w-7 rounded-full bg-white text-black hover:bg-white/85 cursor-pointer"
-              >
-                <Play className="h-3.5 w-3.5 fill-current" />
-              </button>
+              {/* For comics-only viewers the Play chip turns into a Join-Now
+                  shortcut so we never tease access they don't have. */}
+              {user && !canWatch ? (
+                <button
+                  type="button"
+                  onClick={handlePlay}
+                  aria-label={t("header.joinNow")}
+                  className="grid place-items-center h-7 w-7 rounded-full bg-gradient-to-r from-primary to-orange-500 text-white hover:opacity-90 cursor-pointer"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handlePlay}
+                  aria-label={t("modal.play")}
+                  className="grid place-items-center h-7 w-7 rounded-full bg-white text-black hover:bg-white/85 cursor-pointer"
+                >
+                  <Play className="h-3.5 w-3.5 fill-current" />
+                </button>
+              )}
               {token && (
                 <button
                   type="button"

@@ -1,10 +1,11 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Check, Play, Plus, X } from "lucide-react";
+import { Check, Play, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Trailer } from "@/data/trailers";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCollections } from "@/contexts/CollectionsContext";
+import { hasTVAccess } from "@/lib/access";
 
 interface TrailerModalProps {
   trailer: Trailer;
@@ -13,10 +14,11 @@ interface TrailerModalProps {
 
 const TrailerModal = ({ trailer, onClose }: TrailerModalProps) => {
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const { isSaved, toggle } = useCollections();
   const { t } = useTranslation();
   const saved = isSaved("mylist", "show", `trailer-${trailer.id}`);
+  const canWatch = hasTVAccess(user?.subscriptionType);
 
   const handleToggle = () =>
     void toggle("mylist", {
@@ -71,12 +73,28 @@ const TrailerModal = ({ trailer, onClose }: TrailerModalProps) => {
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed">{trailer.description}</p>
           <div className="flex flex-wrap gap-3">
-            <Button
-              className="bg-white text-black hover:bg-white/90 font-bold"
-              onClick={() => navigate(`/bazinga-tv/watch/${trailer.id}`)}
-            >
-              <Play className="h-4 w-4 fill-current" /> {t("modal.play")}
-            </Button>
+            {!user ? (
+              <Button asChild className="bg-white text-black hover:bg-white/90 font-bold">
+                <Link to="/auth">{t("modal.signInToWatch")}</Link>
+              </Button>
+            ) : canWatch ? (
+              <Button
+                className="bg-white text-black hover:bg-white/90 font-bold"
+                onClick={() => navigate(`/bazinga-tv/watch/${trailer.id}`)}
+              >
+                <Play className="h-4 w-4 fill-current" /> {t("modal.play")}
+              </Button>
+            ) : (
+              <Button
+                asChild
+                className="bg-gradient-to-r from-primary to-orange-500 text-white font-bold"
+              >
+                <Link to="/bazinga-unlimited" onClick={onClose}>
+                  <Sparkles className="h-4 w-4" />
+                  {t("modal.subscribeToWatch")}
+                </Link>
+              </Button>
+            )}
             {token && (
               <Button
                 variant="outline"
