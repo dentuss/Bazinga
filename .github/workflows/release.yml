@@ -1,0 +1,76 @@
+name: Release images
+
+# Builds the API + client images and pushes them to GHCR on main / tags.
+# The deploy stack (deploy/.env) references these images.
+on:
+  push:
+    branches: ["main", "master"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  images:
+    name: Build + push images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: api
+            context: bazinga.api
+          - name: client
+            context: bazinga.client
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/bazinga-${{ matrix.name }}
+          tags: |
+            type=sha
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build + push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Optional: SSH into the EC2 host and redeploy after images are pushed.
+  # Enable by setting repo variable ENABLE_SSH_DEPLOY=true and secrets
+  # DEPLOY_HOST / DEPLOY_USER / DEPLOY_SSH_KEY.
+  deploy:
+    name: Deploy to EC2
+    needs: images
+    runs-on: ubuntu-latest
+    if: ${{ vars.ENABLE_SSH_DEPLOY == 'true' }}
+    steps:
+      - name: SSH + redeploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /opt/bazinga/deploy
+            ./scripts/deploy.sh

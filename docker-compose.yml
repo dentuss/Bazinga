@@ -1,27 +1,62 @@
+# Local development stack — builds everything from source and runs the full
+# app (DB + API + SPA) behind a plain-HTTP edge proxy on http://localhost:8080.
+#
+#   docker compose up --build
+#
+# For the production AWS stack (prebuilt images, nginx + Let's Encrypt TLS,
+# RDS) see deploy/docker-compose.yml and deploy/README.md.
+
+name: bazinga-dev
+
 services:
-  api:
-    image: ${API_IMAGE}
+  db:
+    image: mysql:8.4
     restart: unless-stopped
     environment:
-      ASPNETCORE_ENVIRONMENT: ${DOTNET_ENV:-Production}
-      ASPNETCORE_URLS: http://0.0.0.0:8080
-    networks:
-      - bazinga
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-devroot}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-bazinga}
+    volumes:
+      - bazinga-db-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ || exit 0"]
-      interval: 30s
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 12
+    networks: [bazinga]
+
+  api:
+    build:
+      context: ./bazinga.api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      ConnectionStrings__DefaultConnection: "Server=db;Port=3306;Database=${MYSQL_DATABASE:-bazinga};User=root;Password=${MYSQL_ROOT_PASSWORD:-devroot};SslMode=None;AllowPublicKeyRetrieval=true"
+      APP_SECURITY_JWT_SECRET: dev-secret-change-me-dev-secret-change-me
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [bazinga]
 
   client:
-    image: ${CLIENT_IMAGE}
+    build:
+      context: ./bazinga.client
     restart: unless-stopped
+    depends_on: [api]
+    networks: [bazinga]
+
+  proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on: [api, client]
     ports:
-      - "${HTTP_PORT:-80}:80"
-    depends_on:
-      - api
-    networks:
-      - bazinga
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - ./deploy/nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [bazinga]
+
+volumes:
+  bazinga-db-data:
 
 networks:
   bazinga:

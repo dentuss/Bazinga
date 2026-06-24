@@ -1,0 +1,75 @@
+# Production stack for a single AWS EC2 host.
+#
+#   internet ──▶ nginx (:80/:443, TLS via Let's Encrypt) ──┬─▶ client (SPA)
+#                                                          └─▶ api (:8080)
+#   api ──▶ AWS RDS for MySQL (external, via DB_CONNECTION_STRING)
+#
+# Images are built in CI and pulled here; nothing is built on the host.
+# Copy .env.example to .env and fill it in before running. First-time TLS
+# issuance is done by scripts/init-letsencrypt.sh.
+
+name: bazinga
+
+services:
+  api:
+    image: ${API_IMAGE}
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      # --- RDS for MySQL (managed) ---
+      ConnectionStrings__DefaultConnection: ${DB_CONNECTION_STRING}
+      # --- Security ---
+      APP_SECURITY_JWT_SECRET: ${JWT_SECRET}
+      APP_PUBLIC_BASE_URL: https://${DOMAIN}
+      Cors__AllowedOrigins__0: https://${DOMAIN}
+      Cors__AllowedOrigins__1: https://www.${DOMAIN}
+      # --- Email (SMTP) ---
+      APP_EMAIL_HOST: ${SMTP_HOST:-}
+      APP_EMAIL_PORT: ${SMTP_PORT:-587}
+      APP_EMAIL_USE_SSL: ${SMTP_USE_SSL:-true}
+      APP_EMAIL_USERNAME: ${SMTP_USERNAME:-}
+      APP_EMAIL_PASSWORD: ${SMTP_PASSWORD:-}
+      APP_EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Bazinga}
+      APP_EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-no-reply@bazinga.local}
+      # --- Billing (Stripe) ---
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+    networks: [bazinga]
+
+  client:
+    image: ${CLIENT_IMAGE}
+    restart: unless-stopped
+    networks: [bazinga]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on: [api, client]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    # Reload every 6h so renewed certs are picked up without a restart.
+    command: >
+      /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & exec nginx -g 'daemon off;'"
+    networks: [bazinga]
+
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    # Attempt renewal twice a day; certbot only renews within 30 days of expiry.
+    entrypoint: >
+      /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
+
+networks:
+  bazinga:
+    driver: bridge

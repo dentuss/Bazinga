@@ -1,4 +1,9 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+// Default to a same-origin relative base ("") so the production build talks to
+// the API through the edge nginx (which proxies /api → api) over one HTTPS
+// origin — no domain baked into the image. Override with VITE_API_URL only when
+// the API lives on a different origin. In local dev the Vite proxy (see
+// vite.config.ts) forwards /api → http://localhost:8080.
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 type Options = RequestInit & { authToken?: string };
 
