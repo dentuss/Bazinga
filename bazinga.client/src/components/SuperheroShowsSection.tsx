@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronLeft, ChevronRight, Loader2, Play, Plus } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Loader2, Play, Plus, Sparkles } from "lucide-react";
 import ShowModal from "@/components/ShowModal";
 import {
   fetchSuperheroShows,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/metadata";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCollections } from "@/contexts/CollectionsContext";
+import { hasTVAccess } from "@/lib/access";
 import { cn } from "@/lib/utils";
 
 const RAIL_ID = "superhero-shows-rail";
@@ -95,15 +96,24 @@ const ShowCard = ({
   onSelect: (s: SuperheroShowDto) => void;
 }) => {
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const { isSaved, toggle } = useCollections();
   const { t } = useTranslation();
   const saved = isSaved("mylist", "show", String(show.id));
+  const canWatch = hasTVAccess(user?.subscriptionType);
 
   // Hover actions live ON TOP of the card-wide click handler — stopPropagation
   // is critical so a Play / Add tap doesn't also open the detail modal.
   const handlePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!user) {
+      navigate("/auth");
+      return;
+    }
+    if (!canWatch) {
+      navigate("/bazinga-unlimited");
+      return;
+    }
     navigate(`/bazinga-tv/watch/show-${show.id}`);
   };
   const handleToggle = (e: React.MouseEvent) => {
@@ -153,14 +163,25 @@ const ShowCard = ({
               {show.name}
             </p>
             <div className="flex items-center gap-1.5 mb-2">
-              <button
-                type="button"
-                onClick={handlePlay}
-                aria-label={t("modal.play")}
-                className="grid place-items-center h-7 w-7 rounded-full bg-white text-black hover:bg-white/85 cursor-pointer"
-              >
-                <Play className="h-3.5 w-3.5 fill-current" />
-              </button>
+              {user && !canWatch ? (
+                <button
+                  type="button"
+                  onClick={handlePlay}
+                  aria-label={t("header.joinNow")}
+                  className="grid place-items-center h-7 w-7 rounded-full bg-gradient-to-r from-primary to-orange-500 text-white hover:opacity-90 cursor-pointer"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handlePlay}
+                  aria-label={t("modal.play")}
+                  className="grid place-items-center h-7 w-7 rounded-full bg-white text-black hover:bg-white/85 cursor-pointer"
+                >
+                  <Play className="h-3.5 w-3.5 fill-current" />
+                </button>
+              )}
               {token && (
                 <button
                   type="button"

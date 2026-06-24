@@ -24,6 +24,11 @@ const SubscriptionCheckout = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderComplete, setOrderComplete] = useState(false);
 
+  // Subscriber name — both halves are required before checkout will fire.
+  // Prefill from the account profile so returning subscribers don't retype.
+  const [firstName, setFirstName] = useState(user?.firstName ?? "");
+  const [lastName, setLastName] = useState(user?.lastName ?? "");
+
   // Billing intent state — mirrors SignUpComplete's wizard so the checkout
   // form uses the same Stripe Elements path. When Stripe can't be reached
   // the user can fall back to a mock form (no real charge in demo).
@@ -114,9 +119,20 @@ const SubscriptionCheckout = () => {
     setForceMock(true);
   };
 
+  /** True when both first and last name are filled — required to subscribe. */
+  const nameValid = firstName.trim().length > 0 && lastName.trim().length > 0;
+
   const completeSubscription = async () => {
     if (!token) {
       navigate("/auth");
+      return;
+    }
+    if (!nameValid) {
+      toast({
+        title: t("subscription.nameRequired"),
+        description: t("subscription.nameRequiredBody"),
+        variant: "destructive",
+      });
       return;
     }
     setIsProcessing(true);
@@ -238,12 +254,34 @@ const SubscriptionCheckout = () => {
                   <Input id="email" type="email" value={user.email} readOnly />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="firstName">{t("account.firstName")}</Label>
-                  <Input id="firstName" placeholder="John" />
+                  <Label htmlFor="firstName">
+                    {t("account.firstName")} <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="firstName"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="John"
+                    autoComplete="given-name"
+                    required
+                    aria-required="true"
+                    aria-invalid={!firstName.trim()}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lastName">{t("account.lastName")}</Label>
-                  <Input id="lastName" placeholder="Doe" />
+                  <Label htmlFor="lastName">
+                    {t("account.lastName")} <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="lastName"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Doe"
+                    autoComplete="family-name"
+                    required
+                    aria-required="true"
+                    aria-invalid={!lastName.trim()}
+                  />
                 </div>
               </div>
             </div>
@@ -282,6 +320,11 @@ const SubscriptionCheckout = () => {
                 </div>
               )}
 
+              {!nameValid && (stripeReady || showMock) && (
+                <p className="text-xs text-destructive" role="status">
+                  {t("subscription.nameRequiredBody")}
+                </p>
+              )}
               {stripeReady ? (
                 <StripeCardForm
                   publishableKey={billing!.publishableKey!}
@@ -362,7 +405,7 @@ const SubscriptionCheckout = () => {
                   <p className="text-[11px] text-muted-foreground">{t("subscription.mockCardNote")}</p>
                   <Button
                     type="submit"
-                    disabled={isProcessing}
+                    disabled={isProcessing || !nameValid}
                     className="w-full h-12 text-base font-bold"
                   >
                     {isProcessing ? (

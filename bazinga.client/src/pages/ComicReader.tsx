@@ -1,11 +1,13 @@
 import { useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { Navigate, useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { resolveImageUrl } from "@/lib/images";
+import { useAuth } from "@/contexts/AuthContext";
+import { hasComicsAccess } from "@/lib/access";
 
 interface ComicDto {
   id: number;
@@ -16,12 +18,19 @@ interface ComicDto {
 
 const ComicReader = () => {
   const { id } = useParams();
+  const { user } = useAuth();
   const { data: comics = [] } = useQuery<ComicDto[]>({
     queryKey: ["comics"],
     queryFn: () => apiFetch<ComicDto[]>("/api/comics"),
   });
-
   const comic = useMemo(() => comics.find((item) => String(item.id) === String(id)), [comics, id]);
+
+  // TV-only users could deep-link to /read/X straight from the URL bar; bounce
+  // them to the subscription page so they can't side-step the paywall.
+  if (!user) return <Navigate to="/auth" replace />;
+  if (!hasComicsAccess(user.subscriptionType)) {
+    return <Navigate to="/bazinga-unlimited" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
