@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Search, Trash2 } from "lucide-react";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { resolveImageUrl } from "@/lib/images";
 import { useCollections } from "@/contexts/CollectionsContext";
 import { type CollectionItem, type CollectionName } from "@/lib/collections";
@@ -137,6 +139,8 @@ const Tile = ({
   onOpen: () => void;
   onRemove: () => void;
 }) => {
+  const { t } = useTranslation();
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const ring =
     accent === "orange"
       ? "group-hover:ring-orange-500/60 group-hover:shadow-orange-500/30"
@@ -186,12 +190,21 @@ const Tile = ({
       </button>
       <button
         type="button"
-        onClick={onRemove}
+        onClick={() => setConfirmOpen(true)}
         className="absolute top-2 right-2 h-8 w-8 grid place-items-center rounded-full bg-black/70 text-white opacity-0 group-hover:opacity-100 hover:bg-black/90 transition-opacity"
         aria-label={`Remove ${item.title}`}
       >
         <Trash2 className="h-4 w-4" />
       </button>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={t("confirmRemove.title")}
+        description={t("confirmRemove.body", { title: item.title })}
+        cancelLabel={t("confirmRemove.cancel")}
+        confirmLabel={t("confirmRemove.confirm")}
+        onConfirm={onRemove}
+      />
     </div>
   );
 };

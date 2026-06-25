@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Heart, Trash2, BookOpen, ArrowLeft } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { resolveImageUrl } from "@/lib/images";
@@ -11,7 +14,10 @@ import { hasComicsAccess } from "@/lib/access";
 const Wishlist = () => {
   const { items, removeFromWishlist } = useWishlist();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const subscribed = hasComicsAccess(user?.subscriptionType);
+  // Holds the item pending removal-confirmation (null = dialog closed).
+  const [pendingRemoval, setPendingRemoval] = useState<{ id: number; title: string } | null>(null);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -79,7 +85,7 @@ const Wishlist = () => {
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={() => removeFromWishlist(item.id)}
+                      onClick={() => setPendingRemoval({ id: item.id, title: item.title })}
                       className="shrink-0"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -91,6 +97,19 @@ const Wishlist = () => {
           </div>
         )}
       </main>
+
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        onOpenChange={(open) => !open && setPendingRemoval(null)}
+        title={t("confirmRemove.title")}
+        description={t("confirmRemove.body", { title: pendingRemoval?.title ?? "" })}
+        cancelLabel={t("confirmRemove.cancel")}
+        confirmLabel={t("confirmRemove.confirm")}
+        onConfirm={() => {
+          if (pendingRemoval) removeFromWishlist(pendingRemoval.id);
+          setPendingRemoval(null);
+        }}
+      />
 
       <Footer />
     </div>

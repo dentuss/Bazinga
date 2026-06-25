@@ -402,6 +402,12 @@ const en = {
     body: "We're still bringing this one to Bazinga. Browse the catalogue while we sort out the streaming rights.",
     backToTv: "Back to BazingaTV",
   },
+  confirmRemove: {
+    title: "Remove this title?",
+    body: "“{{title}}” will be removed from your collection. You can add it back any time.",
+    cancel: "Cancel",
+    confirm: "Remove",
+  },
   selector: {
     title: "Who's watching?",
     subtitle: "Pick a profile to continue into the Bazinga universe.",
