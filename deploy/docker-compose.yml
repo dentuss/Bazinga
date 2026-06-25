@@ -60,12 +60,17 @@ services:
     # 20-envsubst-on-templates.sh step expands ${DOMAIN} in
     # /etc/nginx/templates/*.template → /etc/nginx/conf.d/*. Without this nginx
     # serves only the stock default config and ACME challenges 404.
-    # The background loop reloads nginx every 6h so renewed certs are picked
-    # up without a restart.
-    command: >
-      /bin/sh -c "/docker-entrypoint.d/20-envsubst-on-templates.sh && \
-                  ( while :; do sleep 6h; nginx -s reload; done ) & \
-                  exec nginx -g 'daemon off;'"
+    # NOTE: the steps are separated by `;` (not `&&`) so envsubst runs in the
+    # FOREGROUND to completion before nginx starts. A previous version used
+    # `&&` which raced — `(envsubst && loop) &` backgrounded envsubst, so
+    # nginx booted with the stock config.
+    command:
+      - /bin/sh
+      - -c
+      - |
+        /docker-entrypoint.d/20-envsubst-on-templates.sh
+        ( while :; do sleep 6h; nginx -s reload; done ) &
+        exec nginx -g 'daemon off;'
     networks: [bazinga]
 
   certbot:
