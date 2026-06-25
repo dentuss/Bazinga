@@ -55,22 +55,10 @@ services:
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./certbot/conf:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro
-    # IMPORTANT: must invoke the image's envsubst entrypoint scripts ourselves
-    # because the custom command below replaces nginx's default entrypoint. The
-    # 20-envsubst-on-templates.sh step expands ${DOMAIN} in
-    # /etc/nginx/templates/*.template → /etc/nginx/conf.d/*. Without this nginx
-    # serves only the stock default config and ACME challenges 404.
-    # NOTE: the steps are separated by `;` (not `&&`) so envsubst runs in the
-    # FOREGROUND to completion before nginx starts. A previous version used
-    # `&&` which raced — `(envsubst && loop) &` backgrounded envsubst, so
-    # nginx booted with the stock config.
-    command:
-      - /bin/sh
-      - -c
-      - |
-        /docker-entrypoint.d/20-envsubst-on-templates.sh
-        ( while :; do sleep 6h; nginx -s reload; done ) &
-        exec nginx -g 'daemon off;'
+    # Use the image's default entrypoint — it runs envsubst on templates →
+    # /etc/nginx/conf.d/, then execs nginx. After cert renewals (which only
+    # happen every ~60 days for Let's Encrypt) reload nginx manually:
+    #   docker compose exec nginx nginx -s reload
     networks: [bazinga]
 
   certbot:
