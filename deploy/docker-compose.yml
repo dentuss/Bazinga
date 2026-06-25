@@ -55,9 +55,17 @@ services:
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./certbot/conf:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro
-    # Reload every 6h so renewed certs are picked up without a restart.
+    # IMPORTANT: must invoke the image's envsubst entrypoint scripts ourselves
+    # because the custom command below replaces nginx's default entrypoint. The
+    # 20-envsubst-on-templates.sh step expands ${DOMAIN} in
+    # /etc/nginx/templates/*.template → /etc/nginx/conf.d/*. Without this nginx
+    # serves only the stock default config and ACME challenges 404.
+    # The background loop reloads nginx every 6h so renewed certs are picked
+    # up without a restart.
     command: >
-      /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & exec nginx -g 'daemon off;'"
+      /bin/sh -c "/docker-entrypoint.d/20-envsubst-on-templates.sh && \
+                  ( while :; do sleep 6h; nginx -s reload; done ) & \
+                  exec nginx -g 'daemon off;'"
     networks: [bazinga]
 
   certbot:
